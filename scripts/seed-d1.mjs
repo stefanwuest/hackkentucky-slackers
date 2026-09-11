@@ -15,11 +15,90 @@ const DATASETS = [
     csv: 'datasets/f_5500_2025_latest.csv',
     layout: 'datasets/f_5500_2025_latest_layout.txt',
     primaryKey: 'ACK_ID',
+    columns: [
+      'ACK_ID',
+      'FORM_PLAN_YEAR_BEGIN_DATE',
+      'FORM_TAX_PRD',
+      'INITIAL_FILING_IND',
+      'AMENDED_IND',
+      'FINAL_FILING_IND',
+      'SHORT_PLAN_YR_IND',
+      'PLAN_NAME',
+      'SPONS_DFE_PN',
+      'PLAN_EFF_DATE',
+      'SPONSOR_DFE_NAME',
+      'SPONS_DFE_DBA_NAME',
+      'SPONS_DFE_MAIL_US_CITY',
+      'SPONS_DFE_MAIL_US_STATE',
+      'SPONS_DFE_MAIL_US_ZIP',
+      'SPONS_DFE_LOC_US_CITY',
+      'SPONS_DFE_LOC_US_STATE',
+      'SPONS_DFE_LOC_US_ZIP',
+      'SPONS_DFE_EIN',
+      'SPONS_DFE_PHONE_NUM',
+      'BUSINESS_CODE',
+      'TOT_PARTCP_BOY_CNT',
+      'TOT_ACTIVE_PARTCP_CNT',
+      'TOT_ACT_PARTCP_BOY_CNT',
+      'PARTCP_ACCOUNT_BAL_CNT',
+      'TYPE_PENSION_BNFT_CODE',
+      'TYPE_WELFARE_BNFT_CODE',
+      'FUNDING_INSURANCE_IND',
+      'BENEFIT_INSURANCE_IND',
+      'SCH_A_ATTACHED_IND',
+      'NUM_SCH_A_ATTACHED_CNT',
+      'FILING_STATUS',
+      'DATE_RECEIVED',
+    ],
   },
   {
     table: 'schedule_a_2025_latest',
     csv: 'datasets/F_SCH_A_2025_latest.csv',
     layout: 'datasets/F_SCH_A_2025_latest_layout.txt',
+    columns: [
+      'ACK_ID',
+      'FORM_ID',
+      'SCH_A_PLAN_YEAR_BEGIN_DATE',
+      'SCH_A_PLAN_YEAR_END_DATE',
+      'SCH_A_PLAN_NUM',
+      'SCH_A_EIN',
+      'INS_CARRIER_NAME',
+      'INS_CARRIER_EIN',
+      'INS_CARRIER_NAIC_CODE',
+      'INS_CONTRACT_NUM',
+      'INS_PRSN_COVERED_EOY_CNT',
+      'INS_POLICY_FROM_DATE',
+      'INS_POLICY_TO_DATE',
+      'INS_BROKER_COMM_TOT_AMT',
+      'INS_BROKER_FEES_TOT_AMT',
+      'WLFR_BNFT_HEALTH_IND',
+      'WLFR_BNFT_DENTAL_IND',
+      'WLFR_BNFT_VISION_IND',
+      'WLFR_BNFT_LIFE_INSUR_IND',
+      'WLFR_BNFT_TEMP_DISAB_IND',
+      'WLFR_BNFT_LONG_TERM_DISAB_IND',
+      'WLFR_BNFT_UNEMP_IND',
+      'WLFR_BNFT_DRUG_IND',
+      'WLFR_BNFT_STOP_LOSS_IND',
+      'WLFR_BNFT_HMO_IND',
+      'WLFR_BNFT_PPO_IND',
+      'WLFR_BNFT_INDEMNITY_IND',
+      'WLFR_BNFT_OTHER_IND',
+      'WLFR_TYPE_BNFT_OTH_TEXT',
+      'WLFR_PREMIUM_RCVD_AMT',
+      'WLFR_TOT_EARNED_PREM_AMT',
+      'WLFR_CLAIMS_PAID_AMT',
+      'WLFR_INCURRED_CLAIM_AMT',
+      'WLFR_RET_COMMISSIONS_AMT',
+      'WLFR_RET_ADMIN_AMT',
+      'WLFR_RET_TOT_AMT',
+      'WLFR_REFUND_AMT',
+      'WLFR_HELD_BNFTS_AMT',
+      'WLFR_CLAIMS_RESERVE_AMT',
+      'WLFR_TOT_CHARGES_PAID_AMT',
+      'WLFR_ACQUIS_COST_AMT',
+      'INS_FAIL_PROVIDE_INFO_IND',
+    ],
     foreignKeys: [
       'FOREIGN KEY ("ACK_ID") REFERENCES "form_5500_2025_latest"("ACK_ID") ON DELETE CASCADE',
     ],
@@ -265,9 +344,23 @@ function sqlValue(value, field) {
   return quoteSql(value)
 }
 
+function selectedFieldsForDataset(dataset, fields) {
+  const fieldByName = new Map(fields.map((field) => [field.name, field]))
+  const selectedFields = dataset.columns.map((name) => {
+    const field = fieldByName.get(name)
+    if (!field) {
+      throw new Error(`${dataset.layout} does not contain selected column ${name}`)
+    }
+    return field
+  })
+
+  return selectedFields
+}
+
 function createTableSql(dataset, fields) {
+  const selectedFields = selectedFieldsForDataset(dataset, fields)
   const constraints = []
-  const columns = fields.map((field) => {
+  const columns = selectedFields.map((field) => {
     const parts = [quoteIdent(field.name), sqliteType(field)]
     if (dataset.primaryKey === field.name) parts.push('PRIMARY KEY')
     return `  ${parts.join(' ')}`
@@ -295,7 +388,9 @@ CREATE INDEX IF NOT EXISTS "idx_schedule_a_policy_dates" ON "schedule_a_2025_lat
 }
 
 async function writeDatasetInserts(stream, dataset, fields, batchSize) {
-  const columns = fields.map((field) => quoteIdent(field.name)).join(', ')
+  const selectedFields = selectedFieldsForDataset(dataset, fields)
+  const selectedIndexes = selectedFields.map((field) => field.position - 1)
+  const columns = selectedFields.map((field) => quoteIdent(field.name)).join(', ')
   let rowNumber = 0
   let inserted = 0
   let batch = []
@@ -319,7 +414,9 @@ async function writeDatasetInserts(stream, dataset, fields, batchSize) {
       throw new Error(`${dataset.csv} row ${rowNumber} has ${row.length} columns; expected ${fields.length}`)
     }
 
-    batch.push(`(${row.map((value, index) => sqlValue(value, fields[index])).join(', ')})`)
+    batch.push(
+      `(${selectedFields.map((field, index) => sqlValue(row[selectedIndexes[index]], field)).join(', ')})`,
+    )
     inserted++
 
     if (batch.length >= batchSize) {
