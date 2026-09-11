@@ -64,3 +64,33 @@ Suggested starting points:
 ## Why It Matters
 
 Instead of asking brokers to manually dig through filings, this project converts public compliance data into timely, practical sales intelligence. The result is faster prospect qualification, better outreach timing, and clearer reasons to call.
+
+## Development
+
+Install dependencies and run the local development server:
+
+```txt
+npm install
+npm run dev
+```
+
+Deploy the Cloudflare Worker:
+
+```txt
+npm run deploy
+```
+
+Generate/synchronize types based on your Worker configuration:
+
+```txt
+npm run cf-typegen
+```
+
+See the [Wrangler types documentation](https://developers.cloudflare.com/workers/wrangler/commands/#types) for more details.
+
+Pass the `CloudflareBindings` as generics when instantiating `Hono`:
+
+```ts
+// src/index.ts
+const app = new Hono<{ Bindings: CloudflareBindings }>()
+```
