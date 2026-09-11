@@ -4,9 +4,11 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "seed:d1": "node scripts/seed-d1.mjs"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "hono": "^4.13.7"
   },
   "devDependencies": {

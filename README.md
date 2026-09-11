@@ -65,12 +65,35 @@ Suggested starting points:
 
 Instead of asking brokers to manually dig through filings, this project converts public compliance data into timely, practical sales intelligence. The result is faster prospect qualification, better outreach timing, and clearer reasons to call.
 
+## API
+
+### `GET /renewals`
+
+Returns Schedule A renewals for a required sponsor mailing `state`.
+
+Query parameters:
+
+- `state` — required 2-letter value present in the Schedule A/Form 5500 join.
+- `coverage_type` — optional array; pass repeated params (`?coverage_type=health&coverage_type=dental`) or comma-separated (`?coverage_type=health,dental`). Supported values: `health`, `dental`, `vision`, `life_insurance`, `short_term_disability`, `long_term_disability`, `unemployment`, `prescription_drug`, `stop_loss`, `hmo`, `ppo`, `indemnity`, `other`.
+- `days_to_renewal` — optional integer from `0` to `365`; keeps renewals whose estimated renewal date is within that many days from today.
+
+The estimated renewal date reuses the policy `INS_POLICY_TO_DATE` month/day in the current year. If that date is already past, the endpoint uses the next year.
+
+Example:
+
+```txt
+/renewals?state=KY&coverage_type=health,dental&days_to_renewal=90
+```
+
+Requires the seeded D1 database to be bound as `DB` (configured in `wrangler.jsonc`).
+
 ## Development
 
-Install dependencies and run the local development server:
+Install dependencies, create your local env file, and run the local development server:
 
 ```txt
 npm install
+cp .env.example .env
 npm run dev
 ```
 
@@ -85,6 +108,24 @@ Generate/synchronize types based on your Worker configuration:
 ```txt
 npm run cf-typegen
 ```
+
+Seed a Cloudflare D1 SQL database from the two public filing datasets in `datasets/`:
+
+```txt
+# build db/generated/seed-d1.sql
+npm run seed:d1
+
+# build and apply locally (uses D1_DATABASE_BINDING from .env when --db is omitted)
+npm run seed:d1 -- --apply --local
+
+# or explicitly provide a database name/binding
+npm run seed:d1 -- --db <DATABASE_NAME_OR_BINDING> --apply --local
+
+# build and apply to Cloudflare
+npm run seed:d1 -- --db <DATABASE_NAME_OR_BINDING> --apply --remote
+```
+
+The seed reads each `*_layout.txt` file to generate the table schema, validates the CSV headers, then ingests `f_5500_2025_latest.csv` into `form_5500_2025_latest` and `F_SCH_A_2025_latest.csv` into `schedule_a_2025_latest`.
 
 See the [Wrangler types documentation](https://developers.cloudflare.com/workers/wrangler/commands/#types) for more details.
 
