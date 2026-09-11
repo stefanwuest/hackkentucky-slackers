@@ -75,14 +75,19 @@ Query parameters:
 
 - `state` — required 2-letter value present in the Schedule A/Form 5500 join.
 - `coverage_type` — optional array; pass repeated params (`?coverage_type=health&coverage_type=dental`) or comma-separated (`?coverage_type=health,dental`). Supported values: `health`, `dental`, `vision`, `life_insurance`, `short_term_disability`, `long_term_disability`, `unemployment`, `prescription_drug`, `stop_loss`, `hmo`, `ppo`, `indemnity`, `other`.
-- `days_to_renewal` — optional integer from `0` to `365`; keeps renewals whose estimated renewal date is within that many days from today.
+- `days_to_renewal` — optional integer from `0` to `365`; backwards-compatible alias for `days_to_renewal_lte`.
+- `days_to_renewal_lt` — optional integer from `0` to `365`; keeps renewals with `days_until_renewal < value`.
+- `days_to_renewal_lte` — optional integer from `0` to `365`; keeps renewals with `days_until_renewal <= value`.
+- `days_to_renewal_gt` — optional integer from `0` to `365`; keeps renewals with `days_until_renewal > value`.
+- `days_to_renewal_gte` — optional integer from `0` to `365`; keeps renewals with `days_until_renewal >= value`.
 
-The estimated renewal date reuses the policy `INS_POLICY_TO_DATE` month/day in the current year. If that date is already past, the endpoint uses the next year.
+The estimated renewal date reuses the policy `INS_POLICY_TO_DATE` month/day in the current year. If that date is already past, the endpoint uses the next year. Multiple `days_to_renewal_*` filters may be combined and are applied with AND semantics.
 
-Example:
+Examples:
 
 ```txt
 /renewals?state=KY&coverage_type=health,dental&days_to_renewal=90
+/renewals?state=KY&days_to_renewal_gte=30&days_to_renewal_lte=90
 ```
 
 Response shape:
@@ -92,7 +97,8 @@ Response shape:
   "filters": {
     "state": "KY",
     "coverage_type": ["health", "dental"],
-    "days_to_renewal": 90
+    "days_to_renewal": 90,
+    "days_to_renewal_filters": [{ "operator": "lte", "value": 90 }]
   },
   "metadata": {
     "as_of_date": "YYYY-MM-DD",

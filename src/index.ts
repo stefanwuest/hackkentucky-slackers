@@ -284,13 +284,53 @@ function parseCoverageTypes(url: URL) {
   }
 }
 
-function parseDaysToRenewal(value: string | null) {
-  if (value == null || value.trim() === '') return { daysToRenewal: undefined }
+type DaysToRenewalOperator = 'lt' | 'lte' | 'gt' | 'gte'
+
+type DaysToRenewalFilter = {
+  operator: DaysToRenewalOperator
+  value: number
+}
+
+function parseDaysToRenewalValue(value: string | null, parameterName: string) {
+  if (value == null || value.trim() === '') return { value: undefined }
   const daysToRenewal = Number(value)
   if (!Number.isInteger(daysToRenewal) || daysToRenewal < 0 || daysToRenewal > 365) {
-    return { error: 'days_to_renewal must be an integer from 0 to 365.' }
+    return { error: `${parameterName} must be an integer from 0 to 365.` }
   }
-  return { daysToRenewal }
+  return { value: daysToRenewal }
+}
+
+function parseDaysToRenewalFilters(url: URL) {
+  const parameterOperators = [
+    ['days_to_renewal', 'lte'],
+    ['days_to_renewal_lt', 'lt'],
+    ['days_to_renewal_lte', 'lte'],
+    ['days_to_renewal_gt', 'gt'],
+    ['days_to_renewal_gte', 'gte'],
+  ] as const
+
+  const filters: DaysToRenewalFilter[] = []
+  let legacyDaysToRenewal: number | undefined
+
+  for (const [parameterName, operator] of parameterOperators) {
+    const parsed = parseDaysToRenewalValue(url.searchParams.get(parameterName), parameterName)
+    if ('error' in parsed) return { error: parsed.error }
+    if (parsed.value === undefined) continue
+
+    filters.push({ operator, value: parsed.value })
+    if (parameterName === 'days_to_renewal') legacyDaysToRenewal = parsed.value
+  }
+
+  return { filters, legacyDaysToRenewal }
+}
+
+function matchesDaysToRenewalFilters(daysUntilRenewal: number, filters: DaysToRenewalFilter[]) {
+  return filters.every((filter) => {
+    if (filter.operator === 'lt') return daysUntilRenewal < filter.value
+    if (filter.operator === 'lte') return daysUntilRenewal <= filter.value
+    if (filter.operator === 'gt') return daysUntilRenewal > filter.value
+    return daysUntilRenewal >= filter.value
+  })
 }
 
 function parseMinimumCount(value: string | null, parameterName: string) {
@@ -522,7 +562,7 @@ app.get('/renewals', async (c) => {
     )
   }
 
-  const parsedDaysToRenewal = parseDaysToRenewal(url.searchParams.get('days_to_renewal'))
+  const parsedDaysToRenewal = parseDaysToRenewalFilters(url)
   if ('error' in parsedDaysToRenewal) {
     return c.json({ error: parsedDaysToRenewal.error }, 400)
   }
@@ -548,10 +588,7 @@ app.get('/renewals', async (c) => {
     if (!renewalDate) return []
 
     const daysUntilRenewal = Math.ceil((renewalDate.getTime() - today.getTime()) / MS_PER_DAY)
-    if (
-      parsedDaysToRenewal.daysToRenewal !== undefined &&
-      daysUntilRenewal > parsedDaysToRenewal.daysToRenewal
-    ) {
+    if (!matchesDaysToRenewalFilters(daysUntilRenewal, parsedDaysToRenewal.filters)) {
       return []
     }
 
@@ -591,7 +628,8 @@ app.get('/renewals', async (c) => {
     filters: {
       state,
       coverage_type: coverageTypes,
-      days_to_renewal: parsedDaysToRenewal.daysToRenewal ?? null,
+      days_to_renewal: parsedDaysToRenewal.legacyDaysToRenewal ?? null,
+      days_to_renewal_filters: parsedDaysToRenewal.filters,
     },
     metadata: {
       as_of_date: toIsoDate(today),
