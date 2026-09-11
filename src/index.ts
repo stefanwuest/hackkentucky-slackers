@@ -54,6 +54,54 @@ type RenewalRow = {
   WLFR_BNFT_OTHER_IND: string | number | null
 }
 
+type ScatteredRenewalGroup = {
+  sponsor: {
+    name: string | null
+    ein: string | null
+    city: string | null
+    state: string | null
+    zip: string | null
+  }
+  coverage_type: CoverageType
+  carriers: Map<
+    string,
+    {
+      name: string | null
+      ein: string | null
+      naic_code: string | null
+    }
+  >
+  contracts: Map<
+    string,
+    {
+      contract_number: string | null
+      carrier_name: string | null
+    }
+  >
+  endMonths: Map<
+    number,
+    {
+      month: number
+      label: string
+      policy_to_dates: Set<string>
+    }
+  >
+  plans: Array<{
+    ack_id: string
+    plan_name: string | null
+    carrier_name: string | null
+    carrier_ein: string | null
+    carrier_naic_code: string | null
+    contract_number: string | null
+    policy_from_date: string | null
+    policy_to_date: string | null
+    policy_end_month: number
+    covered_lives_eoy: number | null
+    premium_received_amount: number | null
+    total_earned_premium_amount: number | null
+  }>
+}
+
 const COVERAGE_TYPES = [
   { value: 'health', label: 'Health', column: 'WLFR_BNFT_HEALTH_IND' },
   { value: 'dental', label: 'Dental', column: 'WLFR_BNFT_DENTAL_IND' },
@@ -135,6 +183,21 @@ const ALLOWED_STATES = [
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const
+
 const app = new Hono<{ Bindings: Bindings }>()
 
 function quoteIdentifier(identifier: string) {
@@ -172,20 +235,37 @@ function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10)
 }
 
-function estimatedRenewalDate(policyToDate: string | null, today = todayUtc()) {
+function policyEndDateParts(policyToDate: string | null) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(policyToDate ?? '')
   if (!match) return null
 
+  const year = Number(match[1])
   const month = Number(match[2])
   const day = Number(match[3])
   if (month < 1 || month > 12 || day < 1 || day > 31) return null
 
-  let estimated = dateFromMonthDay(today.getUTCFullYear(), month, day)
+  return { year, month, day }
+}
+
+function estimatedRenewalDate(policyToDate: string | null, today = todayUtc()) {
+  const parts = policyEndDateParts(policyToDate)
+  if (!parts) return null
+
+  let estimated = dateFromMonthDay(today.getUTCFullYear(), parts.month, parts.day)
   if (estimated.getTime() < today.getTime()) {
-    estimated = dateFromMonthDay(today.getUTCFullYear() + 1, month, day)
+    estimated = dateFromMonthDay(today.getUTCFullYear() + 1, parts.month, parts.day)
   }
 
   return estimated
+}
+
+function monthLabel(month: number) {
+  return MONTH_NAMES[month - 1] ?? 'Unknown'
+}
+
+function normalizeForDistinct(value: string | number | null | undefined) {
+  const normalized = String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  return normalized === '' ? null : normalized
 }
 
 function parseCoverageTypes(url: URL) {
@@ -213,10 +293,86 @@ function parseDaysToRenewal(value: string | null) {
   return { daysToRenewal }
 }
 
+function parseMinimumCount(value: string | null, parameterName: string) {
+  if (value == null || value.trim() === '') return { count: undefined }
+  const count = Number(value)
+  if (!Number.isInteger(count) || count < 1) {
+    return { error: `${parameterName} must be a positive integer.` }
+  }
+  return { count }
+}
+
 function coverageTypesForRow(row: RenewalRow) {
   return COVERAGE_TYPES.filter((coverageType) => isTruthyIndicator(row[coverageType.column as keyof RenewalRow])).map(
     (coverageType) => coverageType.value,
   )
+}
+
+function sponsorKey(row: RenewalRow) {
+  return normalizeForDistinct(row.SPONS_DFE_EIN) ?? normalizeForDistinct(row.SPONSOR_DFE_NAME) ?? row.ACK_ID
+}
+
+function distinctCarrierKey(row: RenewalRow) {
+  const name = normalizeForDistinct(row.INS_CARRIER_NAME)
+  const ein = normalizeForDistinct(row.INS_CARRIER_EIN)
+  const naic = normalizeForDistinct(row.INS_CARRIER_NAIC_CODE)
+  if (!name && !ein && !naic) return null
+  return [name ?? '', ein ?? '', naic ?? ''].join('|')
+}
+
+function distinctContractKey(row: RenewalRow) {
+  return normalizeForDistinct(row.INS_CONTRACT_NUM)
+}
+
+function bindAndQueryRenewalRows(db: D1DatabaseLike, state: string, coverageTypes: CoverageType[]) {
+  const coverageWhere = coverageTypes.length
+    ? `AND (${coverageTypes
+        .map((coverageType) => `${scheduleColumn(COVERAGE_TYPE_BY_VALUE[coverageType].column)} = '1'`)
+        .join(' OR ')})`
+    : ''
+
+  const sql = `
+    SELECT
+      s."ACK_ID",
+      f."PLAN_NAME",
+      f."SPONSOR_DFE_NAME",
+      f."SPONS_DFE_EIN",
+      f."SPONS_DFE_MAIL_US_CITY",
+      f."SPONS_DFE_MAIL_US_STATE",
+      f."SPONS_DFE_MAIL_US_ZIP",
+      s."INS_CARRIER_NAME",
+      s."INS_CARRIER_EIN",
+      s."INS_CARRIER_NAIC_CODE",
+      s."INS_CONTRACT_NUM",
+      s."INS_PRSN_COVERED_EOY_CNT",
+      s."INS_POLICY_FROM_DATE",
+      s."INS_POLICY_TO_DATE",
+      s."WLFR_PREMIUM_RCVD_AMT",
+      s."WLFR_TOT_EARNED_PREM_AMT",
+      s."WLFR_TYPE_BNFT_OTH_TEXT",
+      s."WLFR_BNFT_HEALTH_IND",
+      s."WLFR_BNFT_DENTAL_IND",
+      s."WLFR_BNFT_VISION_IND",
+      s."WLFR_BNFT_LIFE_INSUR_IND",
+      s."WLFR_BNFT_TEMP_DISAB_IND",
+      s."WLFR_BNFT_LONG_TERM_DISAB_IND",
+      s."WLFR_BNFT_UNEMP_IND",
+      s."WLFR_BNFT_DRUG_IND",
+      s."WLFR_BNFT_STOP_LOSS_IND",
+      s."WLFR_BNFT_HMO_IND",
+      s."WLFR_BNFT_PPO_IND",
+      s."WLFR_BNFT_INDEMNITY_IND",
+      s."WLFR_BNFT_OTHER_IND"
+    FROM "schedule_a_2025_latest" s
+    INNER JOIN "form_5500_2025_latest" f ON f."ACK_ID" = s."ACK_ID"
+    WHERE f."SPONS_DFE_MAIL_US_STATE" = ?
+      AND s."INS_POLICY_TO_DATE" IS NOT NULL
+      AND s."INS_POLICY_TO_DATE" != ''
+      ${coverageWhere}
+    ORDER BY s."INS_POLICY_TO_DATE" ASC, f."SPONSOR_DFE_NAME" ASC
+  `
+
+  return db.prepare(sql).bind(state).all<RenewalRow>()
 }
 
 app.get('/', (c) => {
@@ -381,54 +537,7 @@ app.get('/renewals', async (c) => {
     )
   }
 
-  const coverageWhere = coverageTypes.length
-    ? `AND (${coverageTypes
-        .map((coverageType) => `${scheduleColumn(COVERAGE_TYPE_BY_VALUE[coverageType].column)} = '1'`)
-        .join(' OR ')})`
-    : ''
-
-  const sql = `
-    SELECT
-      s."ACK_ID",
-      f."PLAN_NAME",
-      f."SPONSOR_DFE_NAME",
-      f."SPONS_DFE_EIN",
-      f."SPONS_DFE_MAIL_US_CITY",
-      f."SPONS_DFE_MAIL_US_STATE",
-      f."SPONS_DFE_MAIL_US_ZIP",
-      s."INS_CARRIER_NAME",
-      s."INS_CARRIER_EIN",
-      s."INS_CARRIER_NAIC_CODE",
-      s."INS_CONTRACT_NUM",
-      s."INS_PRSN_COVERED_EOY_CNT",
-      s."INS_POLICY_FROM_DATE",
-      s."INS_POLICY_TO_DATE",
-      s."WLFR_PREMIUM_RCVD_AMT",
-      s."WLFR_TOT_EARNED_PREM_AMT",
-      s."WLFR_TYPE_BNFT_OTH_TEXT",
-      s."WLFR_BNFT_HEALTH_IND",
-      s."WLFR_BNFT_DENTAL_IND",
-      s."WLFR_BNFT_VISION_IND",
-      s."WLFR_BNFT_LIFE_INSUR_IND",
-      s."WLFR_BNFT_TEMP_DISAB_IND",
-      s."WLFR_BNFT_LONG_TERM_DISAB_IND",
-      s."WLFR_BNFT_UNEMP_IND",
-      s."WLFR_BNFT_DRUG_IND",
-      s."WLFR_BNFT_STOP_LOSS_IND",
-      s."WLFR_BNFT_HMO_IND",
-      s."WLFR_BNFT_PPO_IND",
-      s."WLFR_BNFT_INDEMNITY_IND",
-      s."WLFR_BNFT_OTHER_IND"
-    FROM "schedule_a_2025_latest" s
-    INNER JOIN "form_5500_2025_latest" f ON f."ACK_ID" = s."ACK_ID"
-    WHERE f."SPONS_DFE_MAIL_US_STATE" = ?
-      AND s."INS_POLICY_TO_DATE" IS NOT NULL
-      AND s."INS_POLICY_TO_DATE" != ''
-      ${coverageWhere}
-    ORDER BY s."INS_POLICY_TO_DATE" ASC, f."SPONSOR_DFE_NAME" ASC
-  `
-
-  const queryResult = await db.prepare(sql).bind(state).all<RenewalRow>()
+  const queryResult = await bindAndQueryRenewalRows(db, state, coverageTypes)
   if (queryResult.success === false) {
     return c.json({ error: queryResult.error ?? 'Failed to query renewals.' }, 500)
   }
@@ -491,6 +600,229 @@ app.get('/renewals', async (c) => {
     },
     count: renewals.length,
     renewals,
+  })
+})
+
+app.get('/scattered-renewals', async (c) => {
+  const url = new URL(c.req.url)
+  const state = url.searchParams.get('state')?.trim().toUpperCase()
+
+  if (!state) {
+    return c.json(
+      {
+        error: 'state is required.',
+        allowed_states: ALLOWED_STATES,
+      },
+      400,
+    )
+  }
+
+  if (!ALLOWED_STATES.includes(state as (typeof ALLOWED_STATES)[number])) {
+    return c.json(
+      {
+        error: 'state must be one of the Schedule A states.',
+        allowed_states: ALLOWED_STATES,
+      },
+      400,
+    )
+  }
+
+  const { coverageTypes, invalid } = parseCoverageTypes(url)
+  if (invalid.length > 0) {
+    return c.json(
+      {
+        error: 'coverage_type contains unsupported values.',
+        invalid_coverage_types: invalid,
+        allowed_coverage_types: COVERAGE_TYPES.map(({ value, label }) => ({ value, label })),
+      },
+      400,
+    )
+  }
+
+  const parsedCarrierCount = parseMinimumCount(url.searchParams.get('carrier_count'), 'carrier_count')
+  if ('error' in parsedCarrierCount) return c.json({ error: parsedCarrierCount.error }, 400)
+
+  const parsedContractCount = parseMinimumCount(url.searchParams.get('contract_count'), 'contract_count')
+  if ('error' in parsedContractCount) return c.json({ error: parsedContractCount.error }, 400)
+
+  const parsedEndMonthCount = parseMinimumCount(url.searchParams.get('end_month_count'), 'end_month_count')
+  if ('error' in parsedEndMonthCount) return c.json({ error: parsedEndMonthCount.error }, 400)
+
+  const hasCountFilters =
+    parsedCarrierCount.count !== undefined ||
+    parsedContractCount.count !== undefined ||
+    parsedEndMonthCount.count !== undefined
+
+  const db = c.env.DB ?? c.env.MY_DB
+  if (!db) {
+    return c.json(
+      {
+        error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+      },
+      500,
+    )
+  }
+
+  const queryResult = await bindAndQueryRenewalRows(db, state, coverageTypes)
+  if (queryResult.success === false) {
+    return c.json({ error: queryResult.error ?? 'Failed to query scattered renewals.' }, 500)
+  }
+
+  const groups = new Map<string, ScatteredRenewalGroup>()
+
+  for (const row of queryResult.results ?? []) {
+    const endDateParts = policyEndDateParts(row.INS_POLICY_TO_DATE)
+    if (!endDateParts) continue
+
+    const rowCoverageTypes = coverageTypesForRow(row).filter(
+      (coverageType) => coverageTypes.length === 0 || coverageTypes.includes(coverageType),
+    )
+
+    for (const coverageType of rowCoverageTypes) {
+      const groupKey = `${sponsorKey(row)}|${coverageType}`
+      let group = groups.get(groupKey)
+
+      if (!group) {
+        group = {
+          sponsor: {
+            name: row.SPONSOR_DFE_NAME,
+            ein: row.SPONS_DFE_EIN,
+            city: row.SPONS_DFE_MAIL_US_CITY,
+            state: row.SPONS_DFE_MAIL_US_STATE,
+            zip: row.SPONS_DFE_MAIL_US_ZIP,
+          },
+          coverage_type: coverageType,
+          carriers: new Map(),
+          contracts: new Map(),
+          endMonths: new Map(),
+          plans: [],
+        }
+        groups.set(groupKey, group)
+      }
+
+      const carrierKey = distinctCarrierKey(row)
+      if (carrierKey && !group.carriers.has(carrierKey)) {
+        group.carriers.set(carrierKey, {
+          name: row.INS_CARRIER_NAME,
+          ein: row.INS_CARRIER_EIN,
+          naic_code: row.INS_CARRIER_NAIC_CODE,
+        })
+      }
+
+      const contractKey = distinctContractKey(row)
+      if (contractKey && !group.contracts.has(contractKey)) {
+        group.contracts.set(contractKey, {
+          contract_number: row.INS_CONTRACT_NUM,
+          carrier_name: row.INS_CARRIER_NAME,
+        })
+      }
+
+      const endMonth = group.endMonths.get(endDateParts.month) ?? {
+        month: endDateParts.month,
+        label: monthLabel(endDateParts.month),
+        policy_to_dates: new Set<string>(),
+      }
+      if (row.INS_POLICY_TO_DATE) endMonth.policy_to_dates.add(row.INS_POLICY_TO_DATE)
+      group.endMonths.set(endDateParts.month, endMonth)
+
+      group.plans.push({
+        ack_id: row.ACK_ID,
+        plan_name: row.PLAN_NAME,
+        carrier_name: row.INS_CARRIER_NAME,
+        carrier_ein: row.INS_CARRIER_EIN,
+        carrier_naic_code: row.INS_CARRIER_NAIC_CODE,
+        contract_number: row.INS_CONTRACT_NUM,
+        policy_from_date: row.INS_POLICY_FROM_DATE,
+        policy_to_date: row.INS_POLICY_TO_DATE,
+        policy_end_month: endDateParts.month,
+        covered_lives_eoy: toNumberOrNull(row.INS_PRSN_COVERED_EOY_CNT),
+        premium_received_amount: toNumberOrNull(row.WLFR_PREMIUM_RCVD_AMT),
+        total_earned_premium_amount: toNumberOrNull(row.WLFR_TOT_EARNED_PREM_AMT),
+      })
+    }
+  }
+
+  const scatteredRenewals = [...groups.values()].flatMap((group) => {
+    const carrierCount = group.carriers.size
+    const contractCount = group.contracts.size
+    const endMonthCount = group.endMonths.size
+
+    const matchesCountFilters = hasCountFilters
+      ? (parsedCarrierCount.count === undefined || carrierCount >= parsedCarrierCount.count) &&
+        (parsedContractCount.count === undefined || contractCount >= parsedContractCount.count) &&
+        (parsedEndMonthCount.count === undefined || endMonthCount >= parsedEndMonthCount.count)
+      : carrierCount > 1 || contractCount > 1 || endMonthCount > 1
+
+    if (!matchesCountFilters) return []
+
+    const scatterReasons = [
+      carrierCount > 1 ? 'multiple_carriers' : null,
+      contractCount > 1 ? 'multiple_contracts' : null,
+      endMonthCount > 1 ? 'multiple_end_months' : null,
+    ].filter((reason): reason is string => reason !== null)
+
+    return [
+      {
+        sponsor: group.sponsor,
+        coverage_type: group.coverage_type,
+        scatter_reasons: scatterReasons,
+        carrier_count: carrierCount,
+        contract_count: contractCount,
+        end_month_count: endMonthCount,
+        row_count: group.plans.length,
+        carriers: [...group.carriers.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+        contracts: [...group.contracts.values()].sort((a, b) =>
+          (a.contract_number ?? '').localeCompare(b.contract_number ?? ''),
+        ),
+        end_months: [...group.endMonths.values()]
+          .sort((a, b) => a.month - b.month)
+          .map((endMonth) => ({
+            month: endMonth.month,
+            label: endMonth.label,
+            policy_to_dates: [...endMonth.policy_to_dates].sort(),
+          })),
+        plans: group.plans.sort((a, b) => {
+          const monthDiff = a.policy_end_month - b.policy_end_month
+          if (monthDiff !== 0) return monthDiff
+          return (a.carrier_name ?? '').localeCompare(b.carrier_name ?? '')
+        }),
+      },
+    ]
+  })
+
+  scatteredRenewals.sort((a, b) => {
+    const reasonDiff = b.scatter_reasons.length - a.scatter_reasons.length
+    if (reasonDiff !== 0) return reasonDiff
+
+    const carrierDiff = b.carrier_count - a.carrier_count
+    if (carrierDiff !== 0) return carrierDiff
+
+    const contractDiff = b.contract_count - a.contract_count
+    if (contractDiff !== 0) return contractDiff
+
+    const endMonthDiff = b.end_month_count - a.end_month_count
+    if (endMonthDiff !== 0) return endMonthDiff
+
+    return (a.sponsor.name ?? '').localeCompare(b.sponsor.name ?? '')
+  })
+
+  return c.json({
+    filters: {
+      state,
+      coverage_type: coverageTypes,
+      carrier_count: parsedCarrierCount.count ?? null,
+      contract_count: parsedContractCount.count ?? null,
+      end_month_count: parsedEndMonthCount.count ?? null,
+    },
+    metadata: {
+      count_filter_semantics: hasCountFilters
+        ? 'Provided count filters are minimums and are combined with AND.'
+        : 'No count filters provided; returned groups have multiple carriers, contracts, or end-date months.',
+      allowed_coverage_types: COVERAGE_TYPES.map(({ value, label }) => ({ value, label })),
+      allowed_states: ALLOWED_STATES,
+    },
+    count: scatteredRenewals.length,
+    scattered_renewals: scatteredRenewals,
   })
 })
 
