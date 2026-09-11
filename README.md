@@ -85,6 +85,145 @@ Example:
 /renewals?state=KY&coverage_type=health,dental&days_to_renewal=90
 ```
 
+Response shape:
+
+```json
+{
+  "filters": {
+    "state": "KY",
+    "coverage_type": ["health", "dental"],
+    "days_to_renewal": 90
+  },
+  "metadata": {
+    "as_of_date": "YYYY-MM-DD",
+    "allowed_coverage_types": [{ "value": "health", "label": "Health" }],
+    "allowed_states": ["KY"]
+  },
+  "count": 1,
+  "renewals": [
+    {
+      "ack_id": "string",
+      "plan_name": "string | null",
+      "sponsor": {
+        "name": "string | null",
+        "ein": "string | null",
+        "city": "string | null",
+        "state": "string | null",
+        "zip": "string | null"
+      },
+      "carrier": {
+        "name": "string | null",
+        "ein": "string | null",
+        "naic_code": "string | null",
+        "contract_number": "string | null"
+      },
+      "coverage_types": ["health"],
+      "other_coverage_text": "string | null",
+      "covered_lives_eoy": "number | null",
+      "policy_from_date": "YYYY-MM-DD | null",
+      "policy_to_date": "YYYY-MM-DD | null",
+      "estimated_renewal_date": "YYYY-MM-DD",
+      "days_until_renewal": 42,
+      "premium_received_amount": "number | null",
+      "total_earned_premium_amount": "number | null"
+    }
+  ]
+}
+```
+
+### `GET /scattered-renewals`
+
+Finds employers whose renewals are scattered across distinct carriers, contract numbers, or policy end-date months, grouped by employer and coverage type.
+
+Query parameters:
+
+- `state` — required 2-letter value present in the Schedule A/Form 5500 join.
+- `coverage_type` — optional array; same supported values and formats as `/renewals`.
+- `carrier_count` — optional positive integer minimum for distinct carriers.
+- `contract_count` — optional positive integer minimum for distinct contract numbers.
+- `end_month_count` — optional positive integer minimum for distinct policy end-date months.
+
+If any count filters are provided, they are treated as minimums and combined with AND. If no count filters are provided, the endpoint returns groups with multiple carriers, multiple contracts, or multiple end-date months.
+
+Example:
+
+```txt
+/scattered-renewals?state=KY&coverage_type=health&carrier_count=2&end_month_count=2
+```
+
+Response shape:
+
+```json
+{
+  "filters": {
+    "state": "KY",
+    "coverage_type": ["health"],
+    "carrier_count": 2,
+    "contract_count": null,
+    "end_month_count": 2
+  },
+  "metadata": {
+    "count_filter_semantics": "Provided count filters are minimums and are combined with AND.",
+    "allowed_coverage_types": [{ "value": "health", "label": "Health" }],
+    "allowed_states": ["KY"]
+  },
+  "count": 1,
+  "scattered_renewals": [
+    {
+      "sponsor": {
+        "name": "string | null",
+        "ein": "string | null",
+        "city": "string | null",
+        "state": "string | null",
+        "zip": "string | null"
+      },
+      "coverage_type": "health",
+      "scatter_reasons": ["multiple_carriers", "multiple_end_months"],
+      "carrier_count": 2,
+      "contract_count": 1,
+      "end_month_count": 2,
+      "row_count": 2,
+      "carriers": [
+        {
+          "name": "string | null",
+          "ein": "string | null",
+          "naic_code": "string | null"
+        }
+      ],
+      "contracts": [
+        {
+          "contract_number": "string | null",
+          "carrier_name": "string | null"
+        }
+      ],
+      "end_months": [
+        {
+          "month": 1,
+          "label": "January",
+          "policy_to_dates": ["YYYY-MM-DD"]
+        }
+      ],
+      "plans": [
+        {
+          "ack_id": "string",
+          "plan_name": "string | null",
+          "carrier_name": "string | null",
+          "carrier_ein": "string | null",
+          "carrier_naic_code": "string | null",
+          "contract_number": "string | null",
+          "policy_from_date": "YYYY-MM-DD | null",
+          "policy_to_date": "YYYY-MM-DD | null",
+          "policy_end_month": 1,
+          "covered_lives_eoy": "number | null",
+          "premium_received_amount": "number | null",
+          "total_earned_premium_amount": "number | null"
+        }
+      ]
+    }
+  ]
+}
+```
+
 Requires the seeded D1 database to be bound as `DB` (configured in `wrangler.jsonc`).
 
 ## Development
@@ -125,7 +264,7 @@ npm run seed:d1 -- --db <DATABASE_NAME_OR_BINDING> --apply --local
 npm run seed:d1 -- --db <DATABASE_NAME_OR_BINDING> --apply --remote
 ```
 
-The seed reads each `*_layout.txt` file to generate the table schema, validates the CSV headers, then ingests `f_5500_2025_latest.csv` into `form_5500_2025_latest` and `F_SCH_A_2025_latest.csv` into `schedule_a_2025_latest`.
+The seed reads each `*_layout.txt` file for types/header validation, then ingests prospect-relevant columns from `f_5500_2025_latest.csv` into `form_5500_2025_latest` and `F_SCH_A_2025_latest.csv` into `schedule_a_2025_latest`.
 
 See the [Wrangler types documentation](https://developers.cloudflare.com/workers/wrangler/commands/#types) for more details.
 
