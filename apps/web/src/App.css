@@ -138,6 +138,10 @@ button {
   flex: 1.4 1 190px;
 }
 
+.filter-field-limit {
+  flex: 0 0 92px;
+}
+
 h1,
 h2,
 h3,
@@ -235,9 +239,20 @@ code {
 }
 
 .pill-amber,
-.tag-row span {
+.tag-row span,
+.severity-medium {
   color: #4b3320;
   background: #f1dfc4;
+}
+
+.severity-high {
+  color: #7f1d1d;
+  background: #fee2e2;
+}
+
+.severity-low {
+  color: #1f3a5f;
+  background: #dbeafe;
 }
 
 .tag-row {
