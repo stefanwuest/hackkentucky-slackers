@@ -39,6 +39,22 @@ function mergeCompanySignals(signals: CompanySignal[]) {
   return [...signals].sort((a, b) => signalSortValue(a) - signalSortValue(b))
 }
 
+function selectedSignalLabelForCompany(company: Company, signalIds: ProspectSignalId[]) {
+  const signal = primarySignal(company)
+  if (!signal) return 'No signal'
+
+  const daysUntilRenewal = signal.properties.minimum_days_until_renewal
+  const matchingSignalDefinition = signalIds
+    .map((signalId) => prospectSignalDefinitionById[signalId])
+    .find((signalDefinition) => {
+      const greaterThanOrEqual = Number(signalDefinition.companyApiQuery.days_to_renewal_gte ?? Number.NEGATIVE_INFINITY)
+      const lessThanOrEqual = Number(signalDefinition.companyApiQuery.days_to_renewal_lte ?? Number.POSITIVE_INFINITY)
+      return daysUntilRenewal >= greaterThanOrEqual && daysUntilRenewal <= lessThanOrEqual
+    })
+
+  return matchingSignalDefinition?.label ?? signal.label
+}
+
 function mergeCompanies(left: Company, right: Company): Company {
   return {
     ...left,
@@ -172,11 +188,7 @@ export function CompaniesPage() {
         id: 'signal',
         accessorFn: (row) => primarySignal(row)?.severity ?? '',
         header: () => <SortableHeader label="Signal" />,
-        cell: ({ row }) => {
-          const signal = primarySignal(row.original)
-          if (!signal) return 'No signal'
-          return <span className={`pill severity-${signal.severity}`}>{signal.label}</span>
-        },
+        cell: ({ row }) => <span className="pill signal-pill">{selectedSignalLabelForCompany(row.original, selectedSignalIds)}</span>,
       },
       {
         id: 'renewal_date',
@@ -244,7 +256,7 @@ export function CompaniesPage() {
         ),
       },
     ],
-    [handleSelectProspect],
+    [handleSelectProspect, selectedSignalIds],
   )
 
   function handleSignalToggle(signalId: ProspectSignalId, checked: boolean) {

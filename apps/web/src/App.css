@@ -547,6 +547,14 @@ code {
   background: #dbeafe;
 }
 
+.signal-pill,
+.table-tags span {
+  border: 1px solid #d1d5db;
+  color: #374151;
+  background: #ffffff;
+  font-weight: 500;
+}
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -624,7 +632,6 @@ tr:hover .sticky-action-column {
   flex: 1;
   flex-direction: column;
   gap: 22px;
-  overflow: hidden;
 }
 
 .cake-detail-hero,

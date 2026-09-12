@@ -227,7 +227,12 @@ export function CompanyCakePage() {
 
   return (
     <div className="cake-page">
-      <CakeHeader showHomeLink />
+      <CakeHeader
+        showHomeLink
+        homeLinkTo={`/prospect/${encodeURIComponent(cake.sponsor_ein)}`}
+        homeLinkLabel="Return to outreach suggestions"
+        homeLinkState={{ company }}
+      />
 
       <div className="cake-detail-layout">
         <aside className="cake-sidebar" aria-label="Company cake summary">
