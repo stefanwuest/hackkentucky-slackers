@@ -312,7 +312,8 @@ The cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
 
 Requirements:
 - Center the cake in a 1:1 image.
-- Make the inscription highly legible, written in piped icing on the cake surface.
+- Make the inscription highly legible, written with cake print on the cake surface.
+- Do not use any icing or ganache. Do not add any icons to the cake. The cake should appear as an editable print with the text only.
 - Keep the design warm, clever, polished, and professional.
 - Use tasteful decorations that support an insurance renewal / business outreach theme.
 - Do not include any extra words, logos, watermarks, hands, people, packaging labels, or UI elements.`

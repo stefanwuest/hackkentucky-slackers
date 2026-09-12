@@ -3,6 +3,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import { CakeHeader } from '../components/CakeHeader'
 import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
@@ -272,11 +273,7 @@ export function CompaniesPage() {
 
   return (
     <>
-      <header className="page-header cake-home-header">
-        <span className="cake-eyebrow">Hackathon MVP</span>
-        <h1>Cake my prospect</h1>
-        <p>Find renewal signals, then turn a prospect into a cake-worthy conversation starter.</p>
-      </header>
+      <CakeHeader />
 
       <div className="faceted-page">
         <Sidebar className="signals-sidebar" aria-label="Company signal filters">

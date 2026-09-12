@@ -164,20 +164,8 @@ export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' 
     .map((line, index) => `<tspan x="450" dy="${index === 0 ? firstDy : 56}">${xmlEscape(line)}</tspan>`)
     .join('\n    ')
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable cake message for ${companyName}">
-  <defs>
-    <radialGradient id="frosting" cx="50%" cy="45%" r="58%">
-      <stop offset="0%" stop-color="${palette.frosting}"/>
-      <stop offset="62%" stop-color="${palette.secondary}"/>
-      <stop offset="100%" stop-color="${palette.primary}"/>
-    </radialGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.2"/>
-    </filter>
-  </defs>
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable message for ${companyName}">
   <rect width="900" height="900" rx="92" fill="${palette.secondary}"/>
-  <circle cx="450" cy="450" r="374" fill="url(#frosting)" filter="url(#shadow)"/>
-  <circle cx="450" cy="450" r="322" fill="none" stroke="#ffffff" stroke-width="18" stroke-dasharray="12 24" opacity="0.95"/>
   <text x="450" y="460" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" fill="${palette.ink}">
     ${messageTspans}
   </text>

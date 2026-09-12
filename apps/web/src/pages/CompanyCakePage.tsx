@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
+import { CakeHeader } from '../components/CakeHeader'
 import { createCakeConcept } from '../features/prospecting/cakeConcept'
 import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
 import { type CakeResponse } from '../features/prospecting/types'
@@ -116,14 +117,7 @@ export function CompanyCakePage() {
 
   return (
     <div className="cake-page">
-      <header className="cake-detail-hero">
-        <Link className="cake-back-link" to="/">
-          ← Back to prospects
-        </Link>
-        <span className="cake-eyebrow">Cake my prospect</span>
-        <h1>{concept.companyName}</h1>
-        <p>Review the printable cake design and mockup for this prospect.</p>
-      </header>
+      <CakeHeader />
 
       <div className="cake-detail-layout">
         <aside className="cake-sidebar" aria-label="Company cake summary">
@@ -153,7 +147,6 @@ export function CompanyCakePage() {
               <div className="cake-output-header">
                 <div>
                   <span className="cake-eyebrow">SVG fallback</span>
-                  <h2>Printable cake design</h2>
                   {isRegeneratingCakeMessage ? <p>Regenerating cake copy…</p> : null}
                   {regenerateError ? <p>{regenerateError}</p> : null}
                 </div>
@@ -168,7 +161,6 @@ export function CompanyCakePage() {
               <div className="cake-output-header">
                 <div>
                   <span className="cake-eyebrow">Generated image</span>
-                  <h2>Cake mockup</h2>
                 </div>
               </div>
               <div className="cake-generated-image-frame">
