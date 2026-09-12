@@ -813,7 +813,7 @@ tr:hover .sticky-action-column {
   flex: 1 1 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  align-content: start;
+  align-items: stretch;
   overflow: auto;
 }
 
@@ -825,6 +825,19 @@ tr:hover .sticky-action-column {
   gap: 18px;
   overflow: hidden;
   padding: 20px;
+}
+
+.cake-preview-column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.cake-mockup-card {
+  flex: 1 1 auto;
 }
 
 .cake-output-header {
@@ -841,8 +854,15 @@ tr:hover .sticky-action-column {
 .cake-download-button,
 .cake-copy-button {
   flex: 0 0 auto;
+  gap: 7px;
   padding: 8px 12px;
   font-size: 0.78rem;
+}
+
+.cake-button-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 .cake-output-actions {
@@ -1160,12 +1180,9 @@ tr:hover .sticky-action-column {
   position: sticky;
   z-index: 2;
   bottom: 0;
-  display: grid;
+  display: flex;
   min-height: clamp(112px, 18dvh, 180px);
   flex: 0 0 auto;
-  grid-auto-rows: minmax(clamp(112px, 18dvh, 180px), auto);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
 }
 
 .cake-action-button {

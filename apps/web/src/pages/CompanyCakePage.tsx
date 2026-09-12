@@ -275,19 +275,36 @@ export function CompanyCakePage() {
                       ))}
                     </div>
                   ) : (
-                    <button
-                      className="cake-icon-button cake-secondary-button"
-                      type="button"
-                      aria-label="Edit cake text"
-                      title="Edit cake text"
-                      disabled={isSavingCakeText}
-                      onClick={handleStartEditingCakeText}
-                    >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                      </svg>
-                    </button>
+                    <>
+                      <button
+                        className="cake-download-button cake-secondary-button"
+                        type="button"
+                        disabled={isRegeneratingCakeMessage || isSavingCakeText}
+                        onClick={() => void handleRegenerateCakeMessage()}
+                      >
+                        <svg className="cake-button-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 3h5v5" />
+                          <path d="M4 20 21 3" />
+                          <path d="M21 16v5h-5" />
+                          <path d="M15 15l6 6" />
+                          <path d="M4 4l5 5" />
+                        </svg>
+                        {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
+                      </button>
+                      <button
+                        className="cake-icon-button cake-secondary-button"
+                        type="button"
+                        aria-label="Edit cake text"
+                        title="Edit cake text"
+                        disabled={isSavingCakeText}
+                        onClick={handleStartEditingCakeText}
+                      >
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -338,29 +355,28 @@ export function CompanyCakePage() {
               </form>
             </article>
 
-            <article className="cake-output-card cake-mockup-card">
-              <div className="cake-output-header">
-                <div>
-                  <span className="cake-eyebrow">Preview</span>
+            <div className="cake-preview-column">
+              <article className="cake-output-card cake-mockup-card">
+                <div className="cake-output-header">
+                  <div>
+                    <span className="cake-eyebrow">Preview</span>
+                  </div>
                 </div>
-              </div>
-              <div className="cake-generated-image-frame">
-                {generatedImageSrc ? (
-                  <img className="cake-generated-image" src={generatedImageSrc} alt={`Generated cake mockup for ${concept.companyName}`} />
-                ) : (
-                  <p>No generated cake image is available yet.</p>
-                )}
-              </div>
-            </article>
-          </section>
+                <div className="cake-generated-image-frame">
+                  {generatedImageSrc ? (
+                    <img className="cake-generated-image" src={generatedImageSrc} alt={`Generated cake mockup for ${concept.companyName}`} />
+                  ) : (
+                    <p>No generated cake image is available yet.</p>
+                  )}
+                </div>
+              </article>
 
-          <section className="cake-action-section" aria-label="Cake actions">
-            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage || isSavingCakeText} onClick={() => void handleRegenerateCakeMessage()}>
-              {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
-            </button>
-            <Link className="cake-action-button cake-action-button-primary" to={`/cakes/${encodeURIComponent(cake.cake_id)}/checkout`}>
-              Continue
-            </Link>
+              <section className="cake-action-section" aria-label="Cake actions">
+                <Link className="cake-action-button cake-action-button-primary" to={`/cakes/${encodeURIComponent(cake.cake_id)}/checkout`}>
+                  Continue
+                </Link>
+              </section>
+            </div>
           </section>
         </main>
       </div>
