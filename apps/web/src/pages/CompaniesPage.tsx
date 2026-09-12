@@ -21,7 +21,7 @@ import {
   type ProspectSignalDefinition,
   type ProspectSignalId,
 } from '../features/prospecting/signals'
-import { type CakeResponse, type CompaniesResponse, type Company, type CompanySignal } from '../features/prospecting/types'
+import { type CompaniesResponse, type Company, type CompanySignal } from '../features/prospecting/types'
 import { api } from '../lib/api'
 
 const DEFAULT_COMPANY_STATE = 'KY'
@@ -124,31 +124,15 @@ export function CompaniesPage() {
   const [selectedState, setSelectedState] = useState(DEFAULT_COMPANY_STATE)
   const [selectedSignalIds, setSelectedSignalIds] = useState<ProspectSignalId[]>(defaultSelectedProspectSignalIds)
   const [tableSearch, setTableSearch] = useState('')
-  const [creatingCakeForEin, setCreatingCakeForEin] = useState<string | null>(null)
-  const [cakeCreationError, setCakeCreationError] = useState<string | null>(null)
-
-  const handleCreateCake = useCallback(
-    async (company: Company) => {
+  const handleSelectProspect = useCallback(
+    (company: Company) => {
       const sponsorEin = company.sponsor_ein
-      if (!sponsorEin || creatingCakeForEin) return
+      if (!sponsorEin) return
 
-      setCakeCreationError(null)
-      setCreatingCakeForEin(sponsorEin)
-
-      try {
-        storeCakeCompany(company)
-        const response = await api.post<CakeResponse>(`/api/company/${encodeURIComponent(sponsorEin)}/cakes`, {
-          businessProfile: getBusinessCardProfile(),
-        })
-        storeCakeCompany(response.company)
-        navigate(`/cakes/${encodeURIComponent(response.cake.cake_id)}`, { state: response })
-      } catch (error) {
-        setCakeCreationError(error instanceof Error ? error.message : 'Failed to create cake.')
-      } finally {
-        setCreatingCakeForEin(null)
-      }
+      storeCakeCompany(company)
+      navigate(`/prospect/${encodeURIComponent(sponsorEin)}`, { state: { company } })
     },
-    [creatingCakeForEin, navigate],
+    [navigate],
   )
 
   const companiesQueryKey = useMemo<CompaniesQueryKey | null>(
@@ -246,21 +230,21 @@ export function CompaniesPage() {
       },
       {
         id: 'cake_action',
-        header: 'Cake',
+        header: 'Outreach',
         enableSorting: false,
         cell: ({ row }) => (
           <button
             className="cake-it-button"
             type="button"
-            disabled={!row.original.sponsor_ein || creatingCakeForEin !== null}
-            onClick={() => void handleCreateCake(row.original)}
+            disabled={!row.original.sponsor_ein}
+            onClick={() => handleSelectProspect(row.original)}
           >
-            {row.original.sponsor_ein ? (creatingCakeForEin === row.original.sponsor_ein ? 'Caking…' : 'Cake it') : 'No EIN'}
+            {row.original.sponsor_ein ? "Close 'em" : 'No EIN'}
           </button>
         ),
       },
     ],
-    [creatingCakeForEin, handleCreateCake],
+    [handleSelectProspect],
   )
 
   function handleSignalToggle(signalId: ProspectSignalId, checked: boolean) {
@@ -356,7 +340,6 @@ export function CompaniesPage() {
 
       <div className="faceted-main">
         {error && <div className="notice error">{error.message}</div>}
-        {cakeCreationError && <div className="notice error">{cakeCreationError}</div>}
 
         <section className="results-section">
           {selectedSignalCount === 0 ? (
