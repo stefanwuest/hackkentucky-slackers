@@ -1,0 +1,98 @@
+[
+  {
+    "id": "cake",
+    "title": "An actual renewal cake",
+    "howItWorks": "A cake iced with \u201cAnother year older. Another renewal.\u201d Include a short personal note.",
+    "example": "Time it ahead of a confirmed renewal planning window.",
+    "status": "available",
+    "shortLabel": "Cake"
+  },
+  {
+    "id": "ice-cream-cart",
+    "title": "An ice cream cart",
+    "howItWorks": "Arrange a brief office visit: \u201cBenefits shouldn\u2019t give you a meltdown.\u201d",
+    "example": "Sponsor a team break and offer HR a useful renewal planning sheet.",
+    "status": "coming_soon",
+    "shortLabel": "Cream"
+  },
+  {
+    "id": "singing-telegram",
+    "title": "A singing telegram",
+    "howItWorks": "A performer delivers a 30-second, company-specific song about renewal season.",
+    "example": "End with one clear introduction to the broker\u2014not a full sales pitch.",
+    "status": "coming_soon",
+    "shortLabel": "Song"
+  },
+  {
+    "id": "miniature-marching-band",
+    "title": "A miniature marching band",
+    "howItWorks": "A short, prearranged performance celebrating the HR team.",
+    "example": "\u201cYour benefits team deserves more fanfare.\u201d Particularly suited to an employee appreciation event.",
+    "status": "coming_soon",
+    "shortLabel": "Band"
+  },
+  {
+    "id": "break-glass-before-renewal",
+    "title": "A \u201cbreak glass before renewal\u201d box",
+    "howItWorks": "An acrylic display box containing coffee, chocolate, and a renewal checklist. No actual glass-breaking required.",
+    "example": "Make the checklist specific to what you found in their filings.",
+    "status": "coming_soon",
+    "shortLabel": "Box"
+  },
+  {
+    "id": "custom-board-game",
+    "title": "A custom board game",
+    "howItWorks": "Send a small \u201cRenewal Season\u201d game: collect census data, chase quotes, survive open enrollment.",
+    "example": "Personalize a few squares to their industry and company.",
+    "status": "coming_soon",
+    "shortLabel": "Game"
+  },
+  {
+    "id": "caricature-artist-pop-up",
+    "title": "A caricature artist pop-up",
+    "howItWorks": "Offer a short session drawing employees as superheroes.",
+    "example": "Frame it as appreciation for the people who keep benefits running.",
+    "status": "coming_soon",
+    "shortLabel": "Art"
+  },
+  {
+    "id": "giant-fortune-cookie",
+    "title": "A giant fortune cookie",
+    "howItWorks": "The fortune reads: \u201cYour next renewal starts with better questions.\u201d",
+    "example": "Include three thoughtful questions based on the account research.",
+    "status": "coming_soon",
+    "shortLabel": "Luck"
+  },
+  {
+    "id": "magician-at-lunch",
+    "title": "A magician at lunch",
+    "howItWorks": "Arrange a short performance around disappearing paperwork and multiplying forms.",
+    "example": "Connect it to reducing HR\u2019s administrative workload. Avoid disappearing-premium promises.",
+    "status": "coming_soon",
+    "shortLabel": "Magic"
+  },
+  {
+    "id": "coffee-cart-custom-drinks",
+    "title": "A coffee cart with custom drink names",
+    "howItWorks": "Serve \u201cThe Open Enrollment Espresso\u201d and \u201cThe Renewal Recovery Latte.\u201d",
+    "example": "Give HR credit for hosting the break; introduce the sponsoring broker clearly.",
+    "status": "coming_soon",
+    "shortLabel": "Coffee"
+  },
+  {
+    "id": "custom-pinata",
+    "title": "A custom pi\u00f1ata",
+    "howItWorks": "A desk-size pi\u00f1ata labeled \u201cRenewal Stress,\u201d filled with individually wrapped treats.",
+    "example": "Attach a practical timeline for getting ahead of renewal.",
+    "status": "coming_soon",
+    "shortLabel": "Treat"
+  },
+  {
+    "id": "fake-newspaper",
+    "title": "A fake newspaper\u2014with an obvious playful label",
+    "howItWorks": "Print a company-specific front page: \u201cLocal HR Team Completes Open Enrollment, Deserves Vacation.\u201d Deliver with pastries.",
+    "example": "Celebrate the buyer\u2019s work and introduce your support offering.",
+    "status": "coming_soon",
+    "shortLabel": "News"
+  }
+]
