@@ -3,8 +3,10 @@ import type { ChatJsonSchemaConfig, ChatMessages, ChatResult } from '@openrouter
 import { CAKE_SHAPES, CAKE_SIZES, type AppBindings, type CakeShape, type CakeSize } from '../types'
 
 export type OpenAiChatModel = `openai/${string}`
+export type OpenAiImageModel = `openai/${string}`
 
 export const DEFAULT_OPENAI_CHAT_MODEL = 'openai/gpt-4o-mini' satisfies OpenAiChatModel
+export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-1-mini' satisfies OpenAiImageModel
 
 const DEFAULT_APP_TITLE = 'Zywave Prospect Intelligence API'
 
@@ -27,6 +29,33 @@ const CAKE_MESSAGE_SCHEMA = {
   required: ['message', 'cake_size', 'cake_shape'],
 } as const
 
+const COMPANY_ADDRESS_CANDIDATE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    address_line_1: {
+      type: ['string', 'null'],
+      description: 'Primary street address line only, without company name.',
+    },
+    address_line_2: {
+      type: ['string', 'null'],
+      description: 'Suite, unit, floor, building, or other secondary address detail, if present.',
+    },
+    city: {
+      type: ['string', 'null'],
+    },
+    state: {
+      type: ['string', 'null'],
+      description: 'Two-letter USPS state abbreviation.',
+    },
+    zip_code: {
+      type: ['string', 'null'],
+      description: 'U.S. ZIP code in 12345 or 12345-6789 format.',
+    },
+  },
+  required: ['address_line_1', 'address_line_2', 'city', 'state', 'zip_code'],
+} as const
+
 type JsonSchema = Exclude<ChatJsonSchemaConfig['schema'], undefined>
 
 export type CakeMessageResponse = {
@@ -41,11 +70,37 @@ export type CakeMessageRequest = {
   maxCharacters?: number
 }
 
+export type CakeImageRequest = {
+  cakeMessage: CakeMessageResponse
+  user?: string
+}
+
+export type CakeImageResponse = {
+  b64_json: string
+  media_type: string | null
+  model: OpenAiImageModel
+  prompt: string
+}
+
+export type CompanyAddressCandidateRequest = {
+  name: string
+  ein: string
+}
+
+export type CompanyAddressCandidateResponse = {
+  address_line_1: string | null
+  address_line_2: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+}
+
 export type ModelQueryServiceOptions = {
   apiKey: string
   appTitle?: string
   httpReferer?: string
   model?: OpenAiChatModel
+  imageModel?: OpenAiImageModel
 }
 
 export type SingleTurnJsonQueryOptions<TResponse> = {
@@ -63,6 +118,8 @@ export type SingleTurnJsonQueryOptions<TResponse> = {
 export type ModelQueryService = {
   singleTurnJsonQuery: <TResponse>(options: SingleTurnJsonQueryOptions<TResponse>) => Promise<TResponse>
   createCakeMessage: (request: CakeMessageRequest) => Promise<CakeMessageResponse>
+  createCakeImage: (request: CakeImageRequest) => Promise<CakeImageResponse>
+  createCompanyAddressCandidate: (request: CompanyAddressCandidateRequest) => Promise<CompanyAddressCandidateResponse>
 }
 
 export function createModelQueryService(options: ModelQueryServiceOptions): ModelQueryService {
@@ -70,6 +127,7 @@ export function createModelQueryService(options: ModelQueryServiceOptions): Mode
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is required to call models.')
 
   const defaultModel = options.model ?? DEFAULT_OPENAI_CHAT_MODEL
+  const defaultImageModel = options.imageModel ?? DEFAULT_OPENAI_IMAGE_MODEL
   const openRouter = new OpenRouter({
     apiKey,
     appTitle: options.appTitle ?? DEFAULT_APP_TITLE,
@@ -147,9 +205,66 @@ ${prospectInformation}`,
     return response
   }
 
+  async function createCakeImage({ cakeMessage, user }: CakeImageRequest) {
+    const validatedCakeMessage = parseCakeMessageResponse(cakeMessage)
+    const prompt = createCakeImagePrompt(validatedCakeMessage)
+
+    const result = await openRouter.images.generate({
+      imageGenerationRequest: {
+        model: defaultImageModel,
+        prompt,
+        aspectRatio: '1:1',
+        quality: 'low',
+        n: 1,
+        stream: false,
+        user,
+      },
+    })
+
+    const image = extractGeneratedImage(result)
+    return {
+      b64_json: image.b64Json,
+      media_type: image.mediaType ?? null,
+      model: defaultImageModel,
+      prompt,
+    }
+  }
+
+  async function createCompanyAddressCandidate({ name, ein }: CompanyAddressCandidateRequest) {
+    const companyName = validateNonEmptyString(name, 'name')
+    const companyEin = validateNonEmptyString(ein, 'ein')
+
+    return singleTurnJsonQuery<CompanyAddressCandidateResponse>({
+      schemaName: 'company_address_candidate',
+      schemaDescription: 'A best-effort candidate for a company U.S. mailing address in standard address fields.',
+      schema: COMPANY_ADDRESS_CANDIDATE_SCHEMA,
+      systemPrompt: `You are helping identify a likely U.S. mailing or headquarters address for a company.
+
+Use the company name and EIN together to disambiguate the company. Return one best address candidate using standard U.S. address formatting.
+
+Requirements:
+- Return only JSON matching the provided schema.
+- Do not include the company name in the address fields.
+- Use address_line_1 for the primary street address.
+- Use address_line_2 only for suite, unit, floor, building, or other secondary address details; otherwise return null.
+- Use a two-letter USPS state abbreviation.
+- Use zip_code in 12345 or 12345-6789 format.
+- If a reliable candidate cannot be identified, return null for unknown fields rather than fabricating details.`,
+      userPrompt: `Find the best U.S. address candidate for this company.
+
+Company name: ${companyName}
+EIN: ${companyEin}`,
+      maxTokens: 120,
+      temperature: 0.2,
+      parseResponse: parseCompanyAddressCandidateResponse,
+    })
+  }
+
   return {
     singleTurnJsonQuery,
     createCakeMessage,
+    createCakeImage,
+    createCompanyAddressCandidate,
   }
 }
 
@@ -178,6 +293,41 @@ function parseJsonObject(content: string) {
   }
 }
 
+function createCakeImagePrompt(cakeMessage: CakeMessageResponse) {
+  const cakeSize = cakeMessage.cake_size.replace('_', ' ')
+
+  return `Create a square, top-down bakery product mockup of a ${cakeSize} ${cakeMessage.cake_shape} frosted cake for a professional B2B prospecting gift.
+
+The cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
+
+Requirements:
+- Center the cake in a 1:1 image.
+- Make the inscription highly legible, written in piped icing on the cake surface.
+- Keep the design warm, clever, polished, and professional.
+- Use tasteful decorations that support an insurance renewal / business outreach theme.
+- Do not include any extra words, logos, watermarks, hands, people, packaging labels, or UI elements.`
+}
+
+function extractGeneratedImage(value: unknown) {
+  if (!isRecord(value) || !Array.isArray(value.data)) {
+    throw new Error('Expected a non-streaming image generation response.')
+  }
+
+  const image = value.data[0]
+  if (!isRecord(image) || typeof image.b64Json !== 'string' || image.b64Json.trim().length === 0) {
+    throw new Error('Image generation response did not include image data.')
+  }
+
+  if (image.mediaType !== undefined && typeof image.mediaType !== 'string') {
+    throw new Error('Image generation response media type must be a string when present.')
+  }
+
+  return {
+    b64Json: image.b64Json,
+    mediaType: image.mediaType,
+  }
+}
+
 function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
   if (
     !isRecord(value) ||
@@ -196,12 +346,63 @@ function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
   }
 }
 
+function parseCompanyAddressCandidateResponse(value: unknown): CompanyAddressCandidateResponse {
+  if (!isRecord(value)) throw new Error('Model response did not match the company address candidate schema.')
+
+  return {
+    address_line_1: normalizeNullableString(value.address_line_1, 'address_line_1'),
+    address_line_2: normalizeNullableString(value.address_line_2, 'address_line_2'),
+    city: normalizeNullableString(value.city, 'city'),
+    state: normalizeState(value.state),
+    zip_code: normalizeZipCode(value.zip_code),
+  }
+}
+
+function normalizeNullableString(value: unknown, fieldName: string) {
+  if (value === null) return null
+  if (typeof value !== 'string') throw new Error(`Model response field ${fieldName} must be a string or null.`)
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeState(value: unknown) {
+  const state = normalizeNullableString(value, 'state')
+  if (state === null) return null
+
+  const normalizedState = state.toUpperCase()
+  if (!/^[A-Z]{2}$/.test(normalizedState)) {
+    throw new Error('Model response field state must be a two-letter USPS abbreviation or null.')
+  }
+
+  return normalizedState
+}
+
+function normalizeZipCode(value: unknown) {
+  const zipCode = normalizeNullableString(value, 'zip_code')
+  if (zipCode === null) return null
+
+  if (/^\d{9}$/.test(zipCode)) return `${zipCode.slice(0, 5)}-${zipCode.slice(5)}`
+  if (!/^\d{5}(-\d{4})?$/.test(zipCode)) {
+    throw new Error('Model response field zip_code must be a 5-digit ZIP code, ZIP+4, or null.')
+  }
+
+  return zipCode
+}
+
 function isCakeSize(value: unknown): value is CakeSize {
   return typeof value === 'string' && CAKE_SIZES.includes(value as CakeSize)
 }
 
 function isCakeShape(value: unknown): value is CakeShape {
   return typeof value === 'string' && CAKE_SHAPES.includes(value as CakeShape)
+}
+
+function validateNonEmptyString(value: string, fieldName: string) {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) throw new Error(`${fieldName} must not be empty.`)
+
+  return trimmed
 }
 
 function validateCharacterRange(minCharacters: number, maxCharacters: number) {
