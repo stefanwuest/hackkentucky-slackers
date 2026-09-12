@@ -122,9 +122,6 @@ export function CompanyCakePage() {
       <div className="cake-detail-layout">
         <aside className="cake-sidebar" aria-label="Company cake summary">
           <div className="cake-sidebar-card">
-            <div className="cake-initials-badge" style={{ background: concept.palette.primary, color: '#fff' }}>
-              {concept.initials}
-            </div>
             <h2>{concept.companyName}</h2>
             <p>{concept.summary.dbaOrEin}</p>
 
