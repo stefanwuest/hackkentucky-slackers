@@ -234,7 +234,6 @@ button {
   min-height: 0;
   flex-direction: column;
   gap: 12px;
-  overflow: hidden;
 }
 
 .cake-home-page .cake-home-header {
@@ -248,7 +247,6 @@ button {
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
-  overflow: hidden;
 }
 
 .signals-sidebar {
@@ -256,7 +254,6 @@ button {
   top: 16px;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -265,7 +262,6 @@ button {
 
 .signals-sidebar [data-slot="sidebar-content"] {
   min-height: 0;
-  overflow: auto;
   padding: 0;
 }
 
@@ -382,7 +378,6 @@ button {
   min-height: 0;
   flex-direction: column;
   gap: 18px;
-  overflow: hidden;
 }
 
 .filter-field {
