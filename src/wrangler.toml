@@ -1,0 +1,8 @@
+name = "hackkentucky-slackers"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.csv"]
+fallthrough = true
