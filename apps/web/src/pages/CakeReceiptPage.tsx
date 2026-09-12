@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
@@ -7,15 +6,6 @@ import { api, apiUrl } from '../lib/api'
 
 type CakeQueryKey = readonly ['cake', string]
 type CheckoutAddressQueryKey = readonly ['checkout-address', string]
-
-const EMPTY_ADDRESS: CheckoutAddress = {
-  line1: '',
-  line2: '',
-  city: '',
-  state: '',
-  postalCode: '',
-  country: 'US',
-}
 
 const PRICE_ITEMS = [
   { label: 'Cake', amount: 4800 },
@@ -45,11 +35,19 @@ function formatUsd(cents: number) {
   return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(cents / 100)
 }
 
-export function CakeCheckoutPage() {
+function formatAddress(address: CheckoutAddress) {
+  const line2 = address.line2.trim()
+  return [
+    address.line1,
+    line2 ? line2 : null,
+    `${address.city}, ${address.state} ${address.postalCode}`,
+    address.country,
+  ].filter(Boolean)
+}
+
+export function CakeReceiptPage() {
   const { cakeId: routeCakeId } = useParams()
   const cakeId = decodeRouteId(routeCakeId)
-  const [address, setAddress] = useState<CheckoutAddress>(EMPTY_ADDRESS)
-  const [isPlaced, setIsPlaced] = useState(false)
 
   const {
     data: cakeResponse,
@@ -67,19 +65,11 @@ export function CakeCheckoutPage() {
     revalidateOnFocus: false,
   })
 
-  useEffect(() => {
-    if (checkoutAddress?.address) setAddress(checkoutAddress.address)
-  }, [checkoutAddress?.address])
-
-  function updateAddressField(field: keyof CheckoutAddress, value: string) {
-    setAddress((currentAddress) => ({ ...currentAddress, [field]: value }))
-  }
-
   const total = PRICE_ITEMS.reduce((sum, item) => sum + item.amount, 0)
   const cake = cakeResponse?.cake
   const company = cakeResponse?.company
   const recipient = checkoutAddress?.recipient ?? company?.name ?? company?.dba_name ?? ''
-  const canPlaceOrder = Boolean(address.line1.trim() && address.city.trim() && address.state.trim() && address.postalCode.trim())
+  const address = checkoutAddress?.address ?? null
   const generatedImageSrc = cake?.has_image_blob
     ? apiUrl(`/api/cakes/${encodeURIComponent(cake.cake_id)}/image`, { v: cake.image_generated_at ?? cake.updated_at })
     : null
@@ -87,7 +77,7 @@ export function CakeCheckoutPage() {
   if (!cakeId) {
     return (
       <section className="checkout-card checkout-card-narrow">
-        <h1>Checkout</h1>
+        <h1>Receipt</h1>
         <p>Missing cake id.</p>
         <Link className="checkout-secondary-button" to="/">
           Back
@@ -99,7 +89,7 @@ export function CakeCheckoutPage() {
   if (isCakeLoading) {
     return (
       <section className="checkout-card checkout-card-narrow">
-        <h1>Checkout</h1>
+        <h1>Receipt</h1>
         <p>Loading…</p>
       </section>
     )
@@ -108,7 +98,7 @@ export function CakeCheckoutPage() {
   if (cakeError || !cake || !company) {
     return (
       <section className="checkout-card checkout-card-narrow">
-        <h1>Checkout</h1>
+        <h1>Receipt</h1>
         <p>{cakeError?.message ?? 'Cake not found.'}</p>
         <Link className="checkout-secondary-button" to="/">
           Back
@@ -119,7 +109,7 @@ export function CakeCheckoutPage() {
 
   return (
     <section className="checkout-card">
-      <h1>Checkout</h1>
+      <h1>Receipt</h1>
 
       {generatedImageSrc ? (
         <img className="checkout-cake-image" src={generatedImageSrc} alt="Cake" />
@@ -127,44 +117,20 @@ export function CakeCheckoutPage() {
         <div className="checkout-cake-image checkout-cake-image-empty">Cake image</div>
       )}
 
-      <label className="checkout-field">
-        <span>Recipient</span>
-        <input value={recipient} readOnly />
-      </label>
+      <div className="checkout-receipt-details">
+        <div className="checkout-receipt-row">
+          <span className="checkout-receipt-label">Recipient: </span>
+          <span className="checkout-receipt-value">{recipient || '—'}</span>
+        </div>
 
-      <div className="checkout-address-fields">
-        <label className="checkout-field">
-          <span>Address line 1</span>
-          <input
-            value={address.line1}
-            placeholder={isAddressLoading ? 'Loading…' : 'Street address'}
-            onChange={(event) => updateAddressField('line1', event.target.value)}
-          />
-        </label>
-
-        <label className="checkout-field">
-          <span>Address line 2</span>
-          <input value={address.line2} placeholder="Apt, suite, etc. (optional)" onChange={(event) => updateAddressField('line2', event.target.value)} />
-        </label>
-
-        <label className="checkout-field">
-          <span>City</span>
-          <input value={address.city} onChange={(event) => updateAddressField('city', event.target.value)} />
-        </label>
-
-        <div className="checkout-address-row">
-          <label className="checkout-field">
-            <span>State</span>
-            <input value={address.state} onChange={(event) => updateAddressField('state', event.target.value)} />
-          </label>
-
-          <label className="checkout-field">
-            <span>ZIP</span>
-            <input value={address.postalCode} onChange={(event) => updateAddressField('postalCode', event.target.value)} />
-          </label>
+        <div className="checkout-receipt-row">
+          <span className="checkout-receipt-label">Address: </span>
+          <span className="checkout-receipt-value">
+            {isAddressLoading ? 'Loading…' : address ? formatAddress(address).join(', ') : '—'}
+          </span>
         </div>
       </div>
-      {addressError ? <p className="checkout-error">Could not load address. Enter it manually.</p> : null}
+      {addressError ? <p className="checkout-error">Could not load address.</p> : null}
 
       <div className="checkout-price-list" aria-label="Price summary">
         {PRICE_ITEMS.map((item) => (
@@ -179,12 +145,11 @@ export function CakeCheckoutPage() {
         </div>
       </div>
 
+      <p className="checkout-thank-you">Thank you for your order! Hope this deal takes the cake 🎂</p>
+
       <div className="checkout-actions">
-        <Link className="checkout-secondary-button" to={`/cakes/${encodeURIComponent(cakeId)}`}>
-          Back
-        </Link>
-        <Link className="checkout-primary-button" to={`/cakes/${encodeURIComponent(cakeId)}/receipt`}>
-          Place order
+        <Link className="checkout-secondary-button" to={`/`}> 
+          Find more contracts...
         </Link>
       </div>
     </section>
