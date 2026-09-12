@@ -436,6 +436,33 @@ code {
   min-width: 160px;
 }
 
+.sticky-action-column {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #ffffff;
+  background-clip: padding-box;
+}
+
+.sticky-action-column::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -14px;
+  width: 14px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(23, 32, 51, 0), rgba(23, 32, 51, 0.08));
+  content: "";
+}
+
+.sticky-action-column-header {
+  z-index: 3;
+}
+
+tr:hover .sticky-action-column {
+  background: rgb(249, 250, 251);
+}
+
 .cake-it-button,
 .cake-download-button,
 .cake-copy-button,

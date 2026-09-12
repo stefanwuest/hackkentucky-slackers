@@ -111,7 +111,10 @@ function DataTable<TData, TValue>({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
+                    className={cn(
+                      'text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap',
+                      header.column.id === 'cake_action' && 'sticky-action-column sticky-action-column-header',
+                    )}
                     style={{ width: header.getSize() === 150 ? undefined : header.getSize() }}
                   >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
@@ -135,7 +138,13 @@ function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-2 align-middle whitespace-nowrap">
+                    <td
+                      key={cell.id}
+                      className={cn(
+                        'p-2 align-middle whitespace-nowrap',
+                        cell.column.id === 'cake_action' && 'sticky-action-column',
+                      )}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

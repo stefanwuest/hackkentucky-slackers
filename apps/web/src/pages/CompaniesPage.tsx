@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
 
 import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel } from '../components/ui/sidebar'
 import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
-import { API_BASE_URL, stateOptions } from '../features/prospecting/constants'
+import { stateOptions } from '../features/prospecting/constants'
 import { formatCoverageType, formatCurrency, formatNumber } from '../features/prospecting/formatters'
 import {
   defaultSelectedProspectSignalIds,
@@ -19,6 +20,7 @@ import {
   type ProspectSignalId,
 } from '../features/prospecting/signals'
 import { type CompaniesResponse, type Company, type CompanySignal } from '../features/prospecting/types'
+import { api } from '../lib/api'
 
 const DEFAULT_COMPANY_STATE = 'KY'
 const COMPANY_RESULTS_LIMIT = '200'
@@ -85,7 +87,9 @@ function intersectCategoryCompanyMaps(categoryCompanyMaps: Array<Map<string, Com
   })
 }
 
-async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: string, abortSignal: AbortSignal) {
+type CompaniesQueryKey = readonly ['companies', string, readonly ProspectSignalId[]]
+
+async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: string) {
   const params = new URLSearchParams({
     state,
     signal: 'upcoming_renewal',
@@ -94,10 +98,23 @@ async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: str
 
   Object.entries(signal.companyApiQuery).forEach(([name, value]) => params.set(name, value))
 
-  const response = await fetch(`${API_BASE_URL}/api/companies?${params}`, { signal: abortSignal })
-  const payload = (await response.json()) as CompaniesResponse
-  if (!response.ok) throw new Error(payload.error ?? 'Unable to load companies.')
+  const payload = await api.get<CompaniesResponse>('/api/companies', { searchParams: params })
   return payload.companies
+}
+
+async function fetchSelectedCompanies([, state, signalIds]: CompaniesQueryKey): Promise<CompaniesResponse> {
+  const selectedSignalsByCategory = groupSelectedSignals([...signalIds])
+  const categoryCompanyMaps = await Promise.all(
+    [...selectedSignalsByCategory.values()].map(async (signals) => {
+      const companyResults = await Promise.all(signals.map((signal) => fetchSignalCompanies(signal, state)))
+      const companyMap = new Map<string, Company>()
+      companyResults.flat().forEach((company) => addCompanyToMap(companyMap, company))
+      return companyMap
+    }),
+  )
+
+  const companies = intersectCategoryCompanyMaps(categoryCompanyMaps)
+  return { count: companies.length, total_count: companies.length, companies }
 }
 
 export function CompaniesPage() {
@@ -105,8 +122,16 @@ export function CompaniesPage() {
   const [selectedState, setSelectedState] = useState(DEFAULT_COMPANY_STATE)
   const [selectedSignalIds, setSelectedSignalIds] = useState<ProspectSignalId[]>(defaultSelectedProspectSignalIds)
   const [tableSearch, setTableSearch] = useState('')
-  const [companyData, setCompanyData] = useState<CompaniesResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+
+  const companiesQueryKey = useMemo<CompaniesQueryKey | null>(
+    () => (selectedSignalIds.length > 0 ? ['companies', selectedState, selectedSignalIds] : null),
+    [selectedSignalIds, selectedState],
+  )
+  const {
+    data: companyData,
+    error,
+    isLoading,
+  } = useSWR<CompaniesResponse, Error, CompaniesQueryKey | null>(companiesQueryKey, fetchSelectedCompanies)
 
   const companyColumns = useMemo<ColumnDef<Company>[]>(
     () => [
@@ -212,45 +237,6 @@ export function CompaniesPage() {
     [navigate],
   )
 
-  useEffect(() => {
-    if (selectedSignalIds.length === 0) {
-      setCompanyData(null)
-      setError(null)
-      return
-    }
-
-    const abortController = new AbortController()
-
-    async function loadResults() {
-      setError(null)
-
-      try {
-        const selectedSignalsByCategory = groupSelectedSignals(selectedSignalIds)
-        const categoryCompanyMaps = await Promise.all(
-          [...selectedSignalsByCategory.values()].map(async (signals) => {
-            const companyResults = await Promise.all(
-              signals.map((signal) => fetchSignalCompanies(signal, selectedState, abortController.signal)),
-            )
-            const companyMap = new Map<string, Company>()
-            companyResults.flat().forEach((company) => addCompanyToMap(companyMap, company))
-            return companyMap
-          }),
-        )
-
-        const companies = intersectCategoryCompanyMaps(categoryCompanyMaps)
-        setCompanyData({ count: companies.length, total_count: companies.length, companies })
-      } catch (err) {
-        if (abortController.signal.aborted) return
-        setError(err instanceof Error ? err.message : 'Unable to load companies.')
-        setCompanyData(null)
-      }
-    }
-
-    void loadResults()
-
-    return () => abortController.abort()
-  }, [selectedSignalIds, selectedState])
-
   function handleSignalToggle(signalId: ProspectSignalId, checked: boolean) {
     setSelectedSignalIds((previousSignalIds) => {
       const nextSignalIds = new Set(previousSignalIds)
@@ -334,7 +320,7 @@ export function CompaniesPage() {
       </Sidebar>
 
       <div className="faceted-main">
-        {error && <div className="notice error">{error}</div>}
+        {error && <div className="notice error">{error.message}</div>}
 
         <section className="results-section">
           {selectedSignalCount === 0 ? (
@@ -351,7 +337,7 @@ export function CompaniesPage() {
               getRowId={(row) => row.company_id}
             />
           ) : (
-            !error && <div className="empty-state">Loading companies for the selected signals.</div>
+            isLoading && <div className="empty-state">Loading companies for the selected signals.</div>
           )}
           </section>
         </div>
