@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import cakeMyProspectLogo from '../assets/cakemyprospect-logo.svg'
+import cakeMyProspectLogo from '../assets/PPLogo.svg'
 import { getBusinessCardProfile, storeBusinessCardProfile } from '../features/profile/profileStorage'
 
 const EMPTY_PROFILE = {
