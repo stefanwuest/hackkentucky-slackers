@@ -1207,7 +1207,6 @@ tr:hover .sticky-action-column {
   border-radius: 18px;
   padding: 24px;
   background: #ffffff;
-  box-shadow: 0 12px 32px rgba(23, 32, 51, 0.08);
 }
 
 .checkout-card-narrow {
@@ -1219,6 +1218,19 @@ tr:hover .sticky-action-column {
   color: #172033;
   font-size: 2rem;
   letter-spacing: -0.04em;
+}
+
+.checkout-receipt-page {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.checkout-receipt-card h1 {
+  align-self: stretch;
+  text-align: center;
 }
 
 .profile-card {
@@ -1257,6 +1269,36 @@ tr:hover .sticky-action-column {
   border-radius: 14px;
   background: #f3f4f6;
   object-fit: cover;
+}
+
+.checkout-receipt-image {
+  width: min(100%, 340px);
+  align-self: center;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(23, 32, 51, 0.1);
+}
+
+.checkout-success-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #16a34a;
+  text-align: center;
+}
+
+.checkout-success-check {
+  width: 84px;
+  height: 84px;
+  flex: 0 0 auto;
+}
+
+.checkout-card .checkout-thank-you {
+  max-width: 360px;
+  color: #14532d;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .checkout-cake-image-empty {
@@ -1356,6 +1398,26 @@ tr:hover .sticky-action-column {
   border: 1px solid #d1d5db;
   color: #172033;
   background: #ffffff;
+}
+
+.checkout-receipt-actions {
+  display: grid;
+  width: min(100%, 560px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.checkout-receipt-more-link {
+  width: 100%;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.05);
+}
+
+.checkout-receipt-print-button {
+  width: 100%;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.14);
 }
 
 .checkout-primary-button {
@@ -1463,4 +1525,5 @@ tr:hover .sticky-action-column {
   .table-filters {
     padding: 12px;
   }
+
 }

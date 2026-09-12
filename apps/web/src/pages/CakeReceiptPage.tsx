@@ -73,6 +73,7 @@ export function CakeReceiptPage() {
   const generatedImageSrc = cake?.has_image_blob
     ? apiUrl(`/api/cakes/${encodeURIComponent(cake.cake_id)}/image`, { v: cake.image_generated_at ?? cake.updated_at })
     : null
+  const handlePrint = () => window.print()
 
   if (!cakeId) {
     return (
@@ -108,50 +109,68 @@ export function CakeReceiptPage() {
   }
 
   return (
-    <section className="checkout-card">
-      <h1>Receipt</h1>
+    <div className="checkout-receipt-page">
+      <section className="checkout-card checkout-receipt-card">
+        <h1>Receipt</h1>
 
-      {generatedImageSrc ? (
-        <img className="checkout-cake-image" src={generatedImageSrc} alt="Cake" />
-      ) : (
-        <div className="checkout-cake-image checkout-cake-image-empty">Cake image</div>
-      )}
+        {generatedImageSrc ? (
+          <img className="checkout-cake-image checkout-receipt-image" src={generatedImageSrc} alt="Cake" />
+        ) : (
+          <div className="checkout-cake-image checkout-cake-image-empty checkout-receipt-image">Cake image</div>
+        )}
 
-      <div className="checkout-receipt-details">
-        <div className="checkout-receipt-row">
-          <span className="checkout-receipt-label">Recipient: </span>
-          <span className="checkout-receipt-value">{recipient || '—'}</span>
+        <div className="checkout-success-message" aria-live="polite">
+          <svg className="checkout-success-check" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
+            <circle cx="48" cy="48" r="42" fill="currentColor" opacity="0.12" />
+            <path
+              d="M30 49.5 42.2 61.7 67 35.8"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="8"
+            />
+          </svg>
+          <p className="checkout-thank-you">Thank you for your order! Hope this deal takes the cake 🎂</p>
         </div>
 
-        <div className="checkout-receipt-row">
-          <span className="checkout-receipt-label">Address: </span>
-          <span className="checkout-receipt-value">
-            {isAddressLoading ? 'Loading…' : address ? formatAddress(address).join(', ') : '—'}
-          </span>
-        </div>
-      </div>
-      {addressError ? <p className="checkout-error">Could not load address.</p> : null}
-
-      <div className="checkout-price-list" aria-label="Price summary">
-        {PRICE_ITEMS.map((item) => (
-          <div className="checkout-price-row" key={item.label}>
-            <span>{item.label}</span>
-            <strong>{formatUsd(item.amount)}</strong>
+        <div className="checkout-receipt-details">
+          <div className="checkout-receipt-row">
+            <span className="checkout-receipt-label">Recipient: </span>
+            <span className="checkout-receipt-value">{recipient || '—'}</span>
           </div>
-        ))}
-        <div className="checkout-price-row checkout-price-total">
-          <span>Total</span>
-          <strong>{formatUsd(total)}</strong>
+
+          <div className="checkout-receipt-row">
+            <span className="checkout-receipt-label">Address: </span>
+            <span className="checkout-receipt-value">
+              {isAddressLoading ? 'Loading…' : address ? formatAddress(address).join(', ') : '—'}
+            </span>
+          </div>
         </div>
-      </div>
+        {addressError ? <p className="checkout-error">Could not load address.</p> : null}
 
-      <p className="checkout-thank-you">Thank you for your order! Hope this deal takes the cake 🎂</p>
+        <div className="checkout-price-list" aria-label="Price summary">
+          {PRICE_ITEMS.map((item) => (
+            <div className="checkout-price-row" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{formatUsd(item.amount)}</strong>
+            </div>
+          ))}
+          <div className="checkout-price-row checkout-price-total">
+            <span>Total</span>
+            <strong>{formatUsd(total)}</strong>
+          </div>
+        </div>
+      </section>
 
-      <div className="checkout-actions">
-        <Link className="checkout-secondary-button" to={`/`}> 
+      <div className="checkout-receipt-actions">
+        <Link className="checkout-secondary-button checkout-receipt-more-link" to={`/`}>
           Find more contracts...
         </Link>
+        <button className="checkout-primary-button checkout-receipt-print-button" type="button" onClick={handlePrint}>
+          Print
+        </button>
       </div>
-    </section>
+    </div>
   )
 }
