@@ -1,15 +1,30 @@
 import type { CoverageType } from './constants'
 
+export const CAKE_SIZES = ['6in', '8in', '10in', '12in', 'half_sheet', 'sheet'] as const
+export const CAKE_SHAPES = ['round', 'square'] as const
+
+export type CakeSize = (typeof CAKE_SIZES)[number]
+export type CakeShape = (typeof CAKE_SHAPES)[number]
+
 export type D1Result<T> = {
   results?: T[]
   success?: boolean
   error?: string
 }
 
+export type D1RunResult = {
+  success?: boolean
+  error?: string
+}
+
+export type D1BoundStatement = {
+  all: <T>() => Promise<D1Result<T>>
+  first: <T>() => Promise<T | null>
+  run: () => Promise<D1RunResult>
+}
+
 export type D1PreparedStatement = {
-  bind: (...values: unknown[]) => {
-    all: <T>() => Promise<D1Result<T>>
-  }
+  bind: (...values: unknown[]) => D1BoundStatement
 }
 
 export type D1DatabaseLike = {
@@ -142,4 +157,34 @@ export type CompanyRenewalSignalRow = {
 export type CompanyDetailRow = Omit<CompanyRenewalSignalRow, 'contract_id' | 'plan_id'> & {
   contract_id: string | null
   plan_id: string | null
+}
+
+export type CakeRow = {
+  cake_id: string
+  sponsor_ein: string
+  company_id: string | null
+  message: string
+  cake_size: CakeSize
+  cake_shape: CakeShape
+  image_mime_type: string | null
+  image_filename: string | null
+  image_generated_at: string | null
+  image_blob_present: string | number | boolean | null
+  created_at: string
+  updated_at: string
+}
+
+export type CakeRecord = {
+  cake_id: string
+  sponsor_ein: string
+  company_id: string | null
+  message: string
+  cake_size: CakeSize
+  cake_shape: CakeShape
+  image_mime_type: string | null
+  image_filename: string | null
+  image_generated_at: string | null
+  has_image_blob: boolean
+  created_at: string
+  updated_at: string
 }

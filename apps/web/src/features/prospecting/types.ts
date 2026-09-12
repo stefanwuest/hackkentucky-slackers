@@ -117,3 +117,27 @@ export type CompanyResponse = {
   company: Company
   error?: string
 }
+
+export type CakeSize = '6in' | '8in' | '10in' | '12in' | 'half_sheet' | 'sheet'
+export type CakeShape = 'round' | 'square'
+
+export type Cake = {
+  cake_id: string
+  sponsor_ein: string
+  company_id: string | null
+  message: string
+  cake_size: CakeSize
+  cake_shape: CakeShape
+  image_mime_type: string | null
+  image_filename: string | null
+  image_generated_at: string | null
+  has_image_blob: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type CakeResponse = {
+  cake: Cake
+  company: Company
+  error?: string
+}

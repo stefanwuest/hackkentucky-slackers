@@ -1,8 +1,9 @@
 import type { Hono } from 'hono'
 import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type CompanySignalType } from '../constants'
+import { getCakeById, insertCake, updateCakeMessage } from '../db/cakes'
 import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
 import { createModelQueryServiceFromEnv } from '../services/model-queries'
-import type { AppBindings, CompanyDetailRow } from '../types'
+import type { AppBindings, CakeRecord, CompanyDetailRow, D1DatabaseLike } from '../types'
 import { coverageTypeFromDbValue, parseCoverageTypes } from '../utils/coverage'
 import { estimatedRenewalDate, toIsoDate, todayUtc } from '../utils/dates'
 import { matchesDaysToRenewalFilters, parseCompanySignalTypes, parseDaysToRenewalFilters, parseLimit } from '../utils/filters'
@@ -263,8 +264,68 @@ function formatUsd(value: number | null) {
     : new Intl.NumberFormat('en-US', { currency: 'USD', maximumFractionDigits: 0, style: 'currency' }).format(value)
 }
 
+function getDatabase(env: AppBindings) {
+  return env.DB ?? env.MY_DB
+}
+
+function createCakeId() {
+  return `cake_${crypto.randomUUID()}`
+}
+
+type CakeMessageOptions = {
+  minCharacters?: number
+  maxCharacters?: number
+}
+
+type CakeResponse = {
+  cake: CakeRecord
+  company: CompanyResponse
+}
+
+function cakeResponse(cake: CakeRecord, company: CompanyResponse): CakeResponse {
+  return { cake, company }
+}
+
+async function getCompanyBySponsorEin(db: D1DatabaseLike, sponsorEin: string) {
+  const queryResult = await bindAndQueryCompanyRowsByEin(db, sponsorEin)
+  if (queryResult.success === false) {
+    throw new Error(queryResult.error ?? 'Failed to query company.')
+  }
+
+  return companyFromRows(queryResult.results ?? [], todayUtc())
+}
+
+async function generateCakeMessage(env: AppBindings, company: CompanyResponse, options: CakeMessageOptions) {
+  return createModelQueryServiceFromEnv(env).createCakeMessage({
+    prospectInformation: cakeProspectInformation(company),
+    minCharacters: options.minCharacters,
+    maxCharacters: options.maxCharacters,
+  })
+}
+
+function parseCakeMessageOptions(body: unknown): CakeMessageOptions | { error: string } {
+  const minCharactersResult = parseOptionalPositiveInteger(body, 'minCharacters', 'min_characters')
+  if ('error' in minCharactersResult) return { error: minCharactersResult.error }
+
+  const maxCharactersResult = parseOptionalPositiveInteger(body, 'maxCharacters', 'max_characters')
+  if ('error' in maxCharactersResult) return { error: maxCharactersResult.error }
+
+  if (
+    minCharactersResult.value !== undefined &&
+    maxCharactersResult.value !== undefined &&
+    minCharactersResult.value > maxCharactersResult.value
+  ) {
+    return { error: 'minCharacters must be less than or equal to maxCharacters.' }
+  }
+
+  return {
+    minCharacters: minCharactersResult.value,
+    maxCharacters: maxCharactersResult.value,
+  }
+}
+
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
-  app.post('/api/company/:sponsorEin/generate-cake', async (c) => {
+  app.post('/api/company/:sponsorEin/cakes', async (c) => {
     const sponsorEin = normalizeSponsorEin(c.req.param('sponsorEin'))
     if (!sponsorEin) return c.json({ error: 'sponsor_ein is required.' }, 400)
 
@@ -275,21 +336,10 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
       return c.json({ error: 'Invalid JSON body.' }, 400)
     }
 
-    const minCharactersResult = parseOptionalPositiveInteger(body, 'minCharacters', 'min_characters')
-    if ('error' in minCharactersResult) return c.json({ error: minCharactersResult.error }, 400)
+    const cakeMessageOptions = parseCakeMessageOptions(body)
+    if ('error' in cakeMessageOptions) return c.json({ error: cakeMessageOptions.error }, 400)
 
-    const maxCharactersResult = parseOptionalPositiveInteger(body, 'maxCharacters', 'max_characters')
-    if ('error' in maxCharactersResult) return c.json({ error: maxCharactersResult.error }, 400)
-
-    if (
-      minCharactersResult.value !== undefined &&
-      maxCharactersResult.value !== undefined &&
-      minCharactersResult.value > maxCharactersResult.value
-    ) {
-      return c.json({ error: 'minCharacters must be less than or equal to maxCharacters.' }, 400)
-    }
-
-    const db = c.env.DB ?? c.env.MY_DB
+    const db = getDatabase(c.env)
     if (!db) {
       return c.json(
         {
@@ -301,25 +351,112 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
 
     if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured.' }, 500)
 
-    const queryResult = await bindAndQueryCompanyRowsByEin(db, sponsorEin)
-    if (queryResult.success === false) {
-      return c.json({ error: queryResult.error ?? 'Failed to query company.' }, 500)
+    let company: CompanyResponse | null
+    try {
+      company = await getCompanyBySponsorEin(db, sponsorEin)
+    } catch (error) {
+      console.error('Failed to query company.', error)
+      return c.json({ error: 'Failed to query company.' }, 500)
     }
 
-    const company = companyFromRows(queryResult.results ?? [], todayUtc())
     if (!company) return c.json({ error: 'Company not found.' }, 404)
 
     try {
-      const message = await createModelQueryServiceFromEnv(c.env).createCakeMessage({
-        prospectInformation: cakeProspectInformation(company),
-        minCharacters: minCharactersResult.value,
-        maxCharacters: maxCharactersResult.value,
+      const cakeMessage = await generateCakeMessage(c.env, company, cakeMessageOptions)
+      const now = new Date().toISOString()
+      const cake = await insertCake(db, {
+        cakeId: createCakeId(),
+        sponsorEin,
+        companyId: company.company_id,
+        message: cakeMessage.message,
+        cakeSize: cakeMessage.cake_size,
+        cakeShape: cakeMessage.cake_shape,
+        createdAt: now,
       })
 
-      return c.json({ message })
+      return c.json(cakeResponse(cake, company), 201)
     } catch (error) {
-      console.error('Failed to generate cake message.', error)
-      return c.json({ error: 'Failed to generate cake message.' }, 502)
+      console.error('Failed to create cake.', error)
+      return c.json({ error: 'Failed to create cake.' }, 502)
+    }
+  })
+
+  app.get('/api/cakes/:cakeId', async (c) => {
+    const cakeId = c.req.param('cakeId')?.trim()
+    if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
+
+    const db = getDatabase(c.env)
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    try {
+      const cake = await getCakeById(db, cakeId)
+      if (!cake) return c.json({ error: 'Cake not found.' }, 404)
+
+      const company = await getCompanyBySponsorEin(db, cake.sponsor_ein)
+      if (!company) return c.json({ error: 'Company not found.' }, 404)
+
+      return c.json(cakeResponse(cake, company))
+    } catch (error) {
+      console.error('Failed to fetch cake.', error)
+      return c.json({ error: 'Failed to fetch cake.' }, 500)
+    }
+  })
+
+  app.put('/api/cakes/:cakeId', async (c) => {
+    const cakeId = c.req.param('cakeId')?.trim()
+    if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
+
+    let body: unknown
+    try {
+      body = await parseOptionalJsonBody(c.req)
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const cakeMessageOptions = parseCakeMessageOptions(body)
+    if ('error' in cakeMessageOptions) return c.json({ error: cakeMessageOptions.error }, 400)
+
+    const db = getDatabase(c.env)
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured.' }, 500)
+
+    try {
+      const existingCake = await getCakeById(db, cakeId)
+      if (!existingCake) return c.json({ error: 'Cake not found.' }, 404)
+
+      const company = await getCompanyBySponsorEin(db, existingCake.sponsor_ein)
+      if (!company) return c.json({ error: 'Company not found.' }, 404)
+
+      const cakeMessage = await generateCakeMessage(c.env, company, cakeMessageOptions)
+      const updatedCake = await updateCakeMessage(db, {
+        cakeId,
+        message: cakeMessage.message,
+        cakeSize: cakeMessage.cake_size,
+        cakeShape: cakeMessage.cake_shape,
+        updatedAt: new Date().toISOString(),
+      })
+
+      if (!updatedCake) return c.json({ error: 'Cake not found.' }, 404)
+
+      return c.json(cakeResponse(updatedCake, company))
+    } catch (error) {
+      console.error('Failed to regenerate cake message.', error)
+      return c.json({ error: 'Failed to regenerate cake message.' }, 502)
     }
   })
 

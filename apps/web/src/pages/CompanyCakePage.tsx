@@ -1,20 +1,13 @@
-import { type CSSProperties, useEffect, useMemo } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
 import { createCakeConcept } from '../features/prospecting/cakeConcept'
-import { readCakeCompany, storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
-import { type Company, type CompanyResponse } from '../features/prospecting/types'
+import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
+import { type CakeResponse } from '../features/prospecting/types'
 import { api } from '../lib/api'
 
-type CompanyCakeRouteState = {
-  company?: Company
-}
-
-type CakeMessageResponse = {
-  message: string
-  error?: string
-}
+type CakeQueryKey = readonly ['cake', string]
 
 function decodeRouteId(value: string | undefined) {
   if (!value) return undefined
@@ -26,13 +19,12 @@ function decodeRouteId(value: string | undefined) {
   }
 }
 
-async function fetchCompanyByEin([, companyEin]: readonly ['company', string]) {
-  const payload = await api.get<CompanyResponse>(`/api/company/${encodeURIComponent(companyEin)}`)
-  return payload.company
+async function fetchCake([, cakeId]: CakeQueryKey) {
+  return api.get<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}`)
 }
 
-async function generateCakeMessage([, companyEin]: readonly ['cake-message', string]) {
-  return api.post<CakeMessageResponse>(`/api/company/${encodeURIComponent(companyEin)}/generate-cake`)
+function isCakeResponse(value: unknown): value is CakeResponse {
+  return typeof value === 'object' && value !== null && 'cake' in value && 'company' in value
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -51,7 +43,7 @@ function MissingCompanyFallback({ message }: { message?: string }) {
       <h1>Pick a prospect to cake first.</h1>
       <p>
         {message ??
-          'The cake detail page needs a company EIN from the prospect table. Head back to the homepage and use the Cake it action on any row.'}
+          'The cake detail page needs a cake id from the prospect table. Head back to the homepage and use the Cake it action on any row.'}
       </p>
       <Link className="cake-primary-link" to="/">
         Back to Cake my prospect
@@ -64,59 +56,60 @@ function LoadingCompanyFallback() {
   return (
     <section className="cake-fallback-card">
       <span className="cake-eyebrow">Mixing batter</span>
-      <h1>Loading company details…</h1>
-      <p>Fetching the latest company data for this EIN.</p>
+      <h1>Loading cake details…</h1>
+      <p>Fetching the saved cake message and latest company data.</p>
     </section>
   )
 }
 
 export function CompanyCakePage() {
-  const { companyEin: routeCompanyEin } = useParams()
-  const companyEin = decodeRouteId(routeCompanyEin)
+  const { cakeId: routeCakeId } = useParams()
+  const cakeId = decodeRouteId(routeCakeId)
   const location = useLocation()
-  const routedCompany = (location.state as CompanyCakeRouteState | null)?.company
-
-  const cachedCompany = useMemo(() => {
-    if (routedCompany?.sponsor_ein === companyEin) return routedCompany
-    return readCakeCompany(companyEin)
-  }, [companyEin, routedCompany])
+  const routedCakeResponse = isCakeResponse(location.state) ? location.state : undefined
+  const fallbackCakeResponse = routedCakeResponse?.cake.cake_id === cakeId ? routedCakeResponse : undefined
+  const [isRegeneratingCakeMessage, setIsRegeneratingCakeMessage] = useState(false)
+  const [regenerateError, setRegenerateError] = useState<string | null>(null)
 
   const {
-    data: fetchedCompany,
+    data: cakeResponse,
     error,
     isLoading,
-  } = useSWR<Company, Error, readonly ['company', string] | null>(
-    companyEin ? ['company', companyEin] : null,
-    fetchCompanyByEin,
-    { fallbackData: cachedCompany ?? undefined },
-  )
+    mutate,
+  } = useSWR<CakeResponse, Error, CakeQueryKey | null>(cakeId ? ['cake', cakeId] : null, fetchCake, {
+    fallbackData: fallbackCakeResponse,
+    revalidateOnFocus: false,
+  })
 
-  const company = fetchedCompany ?? cachedCompany
-
-  const {
-    data: cakeMessageResponse,
-    error: cakeMessageError,
-    isLoading: isGeneratingCakeMessage,
-    isValidating: isRegeneratingCakeMessage,
-    mutate: regenerateCakeMessage,
-  } = useSWR<CakeMessageResponse, Error, readonly ['cake-message', string] | null>(
-    companyEin && company ? ['cake-message', companyEin] : null,
-    generateCakeMessage,
-    {
-      revalidateOnFocus: false,
-      shouldRetryOnError: false,
-    },
-  )
+  const company = cakeResponse?.company
+  const cake = cakeResponse?.cake
 
   useEffect(() => {
     if (company) storeCakeCompany(company)
   }, [company])
 
-  const concept = useMemo(() => (company ? createCakeConcept(company, cakeMessageResponse?.message) : null), [cakeMessageResponse?.message, company])
+  async function handleRegenerateCakeMessage() {
+    if (!cakeId || isRegeneratingCakeMessage) return
 
-  if (!company && isLoading) return <LoadingCompanyFallback />
-  if (!company && error) return <MissingCompanyFallback message={error.message} />
-  if (!company || !concept) return <MissingCompanyFallback />
+    setRegenerateError(null)
+    setIsRegeneratingCakeMessage(true)
+
+    try {
+      const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}`)
+      storeCakeCompany(updatedCakeResponse.company)
+      await mutate(updatedCakeResponse, { revalidate: false })
+    } catch (error) {
+      setRegenerateError(error instanceof Error ? error.message : 'Failed to regenerate cake message.')
+    } finally {
+      setIsRegeneratingCakeMessage(false)
+    }
+  }
+
+  const concept = useMemo(() => (company && cake ? createCakeConcept(company, cake.message) : null), [cake, company])
+
+  if (!cakeResponse && isLoading) return <LoadingCompanyFallback />
+  if (!cakeResponse && error) return <MissingCompanyFallback message={error.message} />
+  if (!company || !cake || !concept) return <MissingCompanyFallback />
 
   return (
     <div className="cake-page">
@@ -148,7 +141,6 @@ export function CompanyCakePage() {
               <SummaryItem label="Total earned premium" value={concept.summary.totalEarnedPremium} />
               <SummaryItem label="Carriers" value={concept.summary.carrierNames} />
             </dl>
-
           </div>
         </aside>
 
@@ -159,8 +151,8 @@ export function CompanyCakePage() {
                 <div>
                   <span className="cake-eyebrow">SVG fallback</span>
                   <h2>Printable cake design</h2>
-                  {isGeneratingCakeMessage ? <p>Generating cake copy…</p> : null}
-                  {cakeMessageError ? <p>Using fallback cake copy.</p> : null}
+                  {isRegeneratingCakeMessage ? <p>Regenerating cake copy…</p> : null}
+                  {regenerateError ? <p>{regenerateError}</p> : null}
                 </div>
                 <a className="cake-download-button" href={concept.printableSvgDataUrl} download={`${concept.initials.toLowerCase()}-cake-design.svg`}>
                   Download SVG
@@ -197,7 +189,7 @@ export function CompanyCakePage() {
           </section>
 
           <section className="cake-action-section" aria-label="Cake actions">
-            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage} onClick={() => void regenerateCakeMessage()}>
+            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage} onClick={() => void handleRegenerateCakeMessage()}>
               {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
             </button>
             <button className="cake-action-button cake-action-button-primary" type="button">

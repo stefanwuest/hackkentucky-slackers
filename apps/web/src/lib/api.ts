@@ -89,4 +89,10 @@ export const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
       headers: body === undefined ? options?.headers : jsonHeaders(options?.headers),
     }),
+  put: <T>(path: string, body?: unknown, options?: ApiRequestOptions) =>
+    request<T>('PUT', path, {
+      ...options,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined ? options?.headers : jsonHeaders(options?.headers),
+    }),
 }

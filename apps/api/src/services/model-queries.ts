@@ -1,6 +1,6 @@
 import { OpenRouter } from '@openrouter/sdk'
 import type { ChatJsonSchemaConfig, ChatMessages, ChatResult } from '@openrouter/sdk/models'
-import type { AppBindings } from '../types'
+import { CAKE_SHAPES, CAKE_SIZES, type AppBindings, type CakeShape, type CakeSize } from '../types'
 
 export type OpenAiChatModel = `openai/${string}`
 
@@ -15,14 +15,24 @@ const CAKE_MESSAGE_SCHEMA = {
     message: {
       type: 'string',
     },
+    cake_size: {
+      type: 'string',
+      enum: CAKE_SIZES,
+    },
+    cake_shape: {
+      type: 'string',
+      enum: CAKE_SHAPES,
+    },
   },
-  required: ['message'],
+  required: ['message', 'cake_size', 'cake_shape'],
 } as const
 
 type JsonSchema = Exclude<ChatJsonSchemaConfig['schema'], undefined>
 
-type CakeMessageResponse = {
+export type CakeMessageResponse = {
   message: string
+  cake_size: CakeSize
+  cake_shape: CakeShape
 }
 
 export type CakeMessageRequest = {
@@ -52,7 +62,7 @@ export type SingleTurnJsonQueryOptions<TResponse> = {
 
 export type ModelQueryService = {
   singleTurnJsonQuery: <TResponse>(options: SingleTurnJsonQueryOptions<TResponse>) => Promise<TResponse>
-  createCakeMessage: (request: CakeMessageRequest) => Promise<string>
+  createCakeMessage: (request: CakeMessageRequest) => Promise<CakeMessageResponse>
 }
 
 export function createModelQueryService(options: ModelQueryServiceOptions): ModelQueryService {
@@ -118,6 +128,8 @@ Your task is to write a witty, memorable message to be written on the cake. The 
 Requirements:
 - The message must be between ${minCharacters} and ${maxCharacters} characters.
 - Keep it short enough to fit naturally on a cake.
+- Recommend a cake_size from: ${CAKE_SIZES.join(', ')}.
+- Recommend a cake_shape from: ${CAKE_SHAPES.join(', ')}.
 - Be clever, warm, and professional.
 - Avoid sounding pushy, creepy, overly salesy, or generic.
 - Do not mention that you are an AI.
@@ -127,12 +139,12 @@ Requirements:
 
 Prospect information:
 ${prospectInformation}`,
-      maxTokens: 80,
+      maxTokens: 100,
       temperature: 0.7,
       parseResponse: parseCakeMessageResponse,
     })
 
-    return response.message
+    return response
   }
 
   return {
@@ -167,13 +179,29 @@ function parseJsonObject(content: string) {
 }
 
 function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
-  if (!isRecord(value) || typeof value.message !== 'string' || value.message.trim().length === 0) {
+  if (
+    !isRecord(value) ||
+    typeof value.message !== 'string' ||
+    value.message.trim().length === 0 ||
+    !isCakeSize(value.cake_size) ||
+    !isCakeShape(value.cake_shape)
+  ) {
     throw new Error('Model response did not match the cake message schema.')
   }
 
   return {
     message: value.message,
+    cake_size: value.cake_size,
+    cake_shape: value.cake_shape,
   }
+}
+
+function isCakeSize(value: unknown): value is CakeSize {
+  return typeof value === 'string' && CAKE_SIZES.includes(value as CakeSize)
+}
+
+function isCakeShape(value: unknown): value is CakeShape {
+  return typeof value === 'string' && CAKE_SHAPES.includes(value as CakeShape)
 }
 
 function validateCharacterRange(minCharacters: number, maxCharacters: number) {
