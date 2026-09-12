@@ -1,12 +1,12 @@
-import cakeMyProspectLogo from '../assets/cakemyprospect-logo.svg'
+import cakeMyProspectLogo from '../assets/PPLogo.svg'
 
 export function CakeHeader() {
   return (
     <header className="page-header cake-home-header">
       <h1>
-        <img className="cake-home-logo" src={cakeMyProspectLogo} alt="Cake my prospect" />
+        <img className="cake-home-logo" src={cakeMyProspectLogo} alt="Prospect Party, Powered by Zywave" />
       </h1>
-      <p>Find renewal signals, then turn a prospect into a cake-worthy conversation starter.</p>
+      <p>Start the conversation today.</p>
     </header>
   )
 }
