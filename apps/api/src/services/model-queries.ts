@@ -3,9 +3,12 @@ import type { ChatJsonSchemaConfig, ChatMessages, ChatResult } from '@openrouter
 import { CAKE_SHAPES, CAKE_SIZES, type AppBindings, type CakeShape, type CakeSize } from '../types'
 
 export type OpenAiChatModel = `openai/${string}`
+export type GeminiChatModel = `google/${string}`
+export type ChatModel = OpenAiChatModel | GeminiChatModel
 export type OpenAiImageModel = `openai/${string}`
 
 export const DEFAULT_OPENAI_CHAT_MODEL = 'openai/gpt-4o-mini' satisfies OpenAiChatModel
+export const DEFAULT_GEMINI_ADDRESS_LOOKUP_MODEL = 'google/gemini-2.5-flash-lite' satisfies GeminiChatModel
 export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-1-mini' satisfies OpenAiImageModel
 
 const DEFAULT_APP_TITLE = 'Zywave Prospect Intelligence API'
@@ -85,6 +88,8 @@ export type CakeImageResponse = {
 export type CompanyAddressCandidateRequest = {
   name: string
   ein: string
+  city?: string | null
+  state?: string | null
 }
 
 export type CompanyAddressCandidateResponse = {
@@ -99,7 +104,7 @@ export type ModelQueryServiceOptions = {
   apiKey: string
   appTitle?: string
   httpReferer?: string
-  model?: OpenAiChatModel
+  model?: ChatModel
   imageModel?: OpenAiImageModel
 }
 
@@ -109,7 +114,7 @@ export type SingleTurnJsonQueryOptions<TResponse> = {
   schema: JsonSchema
   schemaDescription?: string
   schemaName: string
-  model?: OpenAiChatModel
+  model?: ChatModel
   temperature?: number
   maxTokens?: number
   parseResponse?: (value: unknown) => TResponse
@@ -230,9 +235,11 @@ ${prospectInformation}`,
     }
   }
 
-  async function createCompanyAddressCandidate({ name, ein }: CompanyAddressCandidateRequest) {
+  async function createCompanyAddressCandidate({ name, ein, city, state }: CompanyAddressCandidateRequest) {
     const companyName = validateNonEmptyString(name, 'name')
     const companyEin = validateNonEmptyString(ein, 'ein')
+    const knownCity = city?.trim() || null
+    const knownState = state?.trim() || null
 
     return singleTurnJsonQuery<CompanyAddressCandidateResponse>({
       schemaName: 'company_address_candidate',
@@ -240,7 +247,7 @@ ${prospectInformation}`,
       schema: COMPANY_ADDRESS_CANDIDATE_SCHEMA,
       systemPrompt: `You are helping identify a likely U.S. mailing or headquarters address for a company.
 
-Use the company name and EIN together to disambiguate the company. Return one best address candidate using standard U.S. address formatting.
+Use the company name, EIN, and known location context together to disambiguate the company. Return one best address candidate using standard U.S. address formatting.
 
 Requirements:
 - Return only JSON matching the provided schema.
@@ -253,7 +260,10 @@ Requirements:
       userPrompt: `Find the best U.S. address candidate for this company.
 
 Company name: ${companyName}
-EIN: ${companyEin}`,
+EIN: ${companyEin}
+Known city: ${knownCity ?? 'unknown'}
+Known state: ${knownState ?? 'unknown'}`,
+      model: DEFAULT_GEMINI_ADDRESS_LOOKUP_MODEL,
       maxTokens: 120,
       temperature: 0.2,
       parseResponse: parseCompanyAddressCandidateResponse,

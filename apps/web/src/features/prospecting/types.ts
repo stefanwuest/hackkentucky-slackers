@@ -141,3 +141,18 @@ export type CakeResponse = {
   company: Company
   error?: string
 }
+
+export type CheckoutAddress = {
+  line1: string
+  line2: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
+
+export type CheckoutAddressResponse = {
+  recipient: string
+  address: CheckoutAddress
+  error?: string
+}

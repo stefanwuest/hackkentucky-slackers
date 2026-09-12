@@ -440,6 +440,54 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
     }
   })
 
+  app.get('/api/cakes/:cakeId/checkout-address', async (c) => {
+    const cakeId = c.req.param('cakeId')?.trim()
+    if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
+
+    const db = getDatabase(c.env)
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    try {
+      const cake = await getCakeById(db, cakeId)
+      if (!cake) return c.json({ error: 'Cake not found.' }, 404)
+
+      const company = await getCompanyBySponsorEin(db, cake.sponsor_ein)
+      if (!company) return c.json({ error: 'Company not found.' }, 404)
+      if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured.' }, 500)
+
+      const recipient = company.name ?? company.dba_name ?? 'Recipient'
+      const modelService = createModelQueryServiceFromEnv(c.env)
+      const address = await modelService.createCompanyAddressCandidate({
+        name: recipient,
+        ein: cake.sponsor_ein,
+        city: company.location.city,
+        state: company.location.state,
+      })
+
+      return c.json({
+        recipient,
+        address: {
+          line1: address.address_line_1 ?? '',
+          line2: address.address_line_2 ?? '',
+          city: address.city ?? '',
+          state: address.state ?? '',
+          postalCode: address.zip_code ?? '',
+          country: 'US',
+        },
+      })
+    } catch (error) {
+      console.error('Failed to fetch checkout address.', error)
+      return c.json({ error: 'Failed to fetch checkout address.' }, 502)
+    }
+  })
+
   app.get('/api/cakes/:cakeId/image', async (c) => {
     const cakeId = c.req.param('cakeId')?.trim()
     if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)

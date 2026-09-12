@@ -185,9 +185,9 @@ export function CompanyCakePage() {
             <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage} onClick={() => void handleRegenerateCakeMessage()}>
               {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
             </button>
-            <button className="cake-action-button cake-action-button-primary" type="button">
+            <Link className="cake-action-button cake-action-button-primary" to={`/cakes/${encodeURIComponent(cake.cake_id)}/checkout`}>
               Continue
-            </button>
+            </Link>
           </section>
         </main>
       </div>
