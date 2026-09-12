@@ -105,9 +105,12 @@ button {
 }
 
 .app-shell {
+  display: flex;
   width: min(1220px, calc(100% - 32px));
   margin: 0 auto;
   padding: 36px 0 48px;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .table-filters {
@@ -178,6 +181,13 @@ label {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.page-not-found {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
 }
 
 code {
