@@ -1371,7 +1371,7 @@ tr:hover .sticky-action-column {
   flex-direction: column;
   gap: 10px;
   border-top: 1px solid #e5e7eb;
-  padding-top: 4px;
+  padding-top: 16px;
 }
 
 .checkout-price-row {
@@ -1391,6 +1391,10 @@ tr:hover .sticky-action-column {
   color: #172033;
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.checkout-price-row  strong {
+    font-weight: inherit;
 }
 
 .checkout-actions {
