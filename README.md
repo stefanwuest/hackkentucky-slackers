@@ -67,7 +67,7 @@ Instead of asking brokers to manually dig through filings, this project converts
 
 ## API
 
-### `GET /renewals`
+### `GET /api/renewals`
 
 Returns Schedule A renewals for a required sponsor mailing `state`.
 
@@ -86,8 +86,8 @@ The estimated renewal date reuses the policy `INS_POLICY_TO_DATE` month/day in t
 Examples:
 
 ```txt
-/renewals?state=KY&coverage_type=health,dental&days_to_renewal=90
-/renewals?state=KY&days_to_renewal_gte=30&days_to_renewal_lte=90
+/api/renewals?state=KY&coverage_type=health,dental&days_to_renewal=90
+/api/renewals?state=KY&days_to_renewal_gte=30&days_to_renewal_lte=90
 ```
 
 Response shape:
@@ -137,14 +137,14 @@ Response shape:
 }
 ```
 
-### `GET /scattered-renewals`
+### `GET /api/scattered-renewals`
 
 Finds employers whose renewals are scattered across distinct carriers, contract numbers, or policy end-date months, grouped by employer and coverage type.
 
 Query parameters:
 
 - `state` — required 2-letter value present in the Schedule A/Form 5500 join.
-- `coverage_type` — optional array; same supported values and formats as `/renewals`.
+- `coverage_type` — optional array; same supported values and formats as `/api/renewals`.
 - `carrier_count` — optional positive integer minimum for distinct carriers.
 - `contract_count` — optional positive integer minimum for distinct contract numbers.
 - `end_month_count` — optional positive integer minimum for distinct policy end-date months.
@@ -154,7 +154,7 @@ If any count filters are provided, they are treated as minimums and combined wit
 Example:
 
 ```txt
-/scattered-renewals?state=KY&coverage_type=health&carrier_count=2&end_month_count=2
+/api/scattered-renewals?state=KY&coverage_type=health&carrier_count=2&end_month_count=2
 ```
 
 Response shape:
@@ -230,11 +230,18 @@ Response shape:
 }
 ```
 
-Requires the seeded D1 database to be bound as `DB` (configured in `wrangler.jsonc`).
+Requires the seeded D1 database to be bound as `DB` (configured in `apps/api/wrangler.jsonc`).
 
 ## Development
 
-Install dependencies, create your local env file, and run the local development server:
+This repo is split into separate workspaces:
+
+```txt
+apps/api  # Hono + Cloudflare Worker + D1 API
+apps/web  # React + Vite frontend
+```
+
+Install dependencies, create your local env file, and run the local React + Hono development servers:
 
 ```txt
 npm install
@@ -242,11 +249,22 @@ cp .env.example .env
 npm run dev
 ```
 
-Deploy the Cloudflare Worker:
+`npm run dev` starts the API Worker on `http://localhost:8787` and the React app on `http://localhost:5173`. The Vite dev server proxies `/api/*` to the Worker. You can also run them separately with `npm run dev:api` and `npm run dev:web`. For separately deployed frontends, set `VITE_API_BASE_URL` to the API Worker origin.
+
+Build both apps:
 
 ```txt
-npm run deploy
+npm run build
 ```
+
+Preview or deploy the API Worker:
+
+```txt
+npm run preview:api
+npm run deploy:api
+```
+
+The React app is intentionally separate and builds to `apps/web/dist`, so it can be deployed to Cloudflare Pages or swapped for another frontend without changing the API Worker.
 
 Generate/synchronize types based on your Worker configuration:
 
@@ -260,7 +278,8 @@ Seed a Cloudflare D1 SQL database from the two public filing datasets in `datase
 # build db/generated/seed-d1.sql
 npm run seed:d1
 
-# build and apply locally (uses D1_DATABASE_BINDING from .env when --db is omitted)
+# build and apply locally (uses D1_DATABASE_BINDING from .env when --db is omitted,
+# and apps/api/wrangler.jsonc for the Worker/D1 config)
 npm run seed:d1 -- --apply --local
 
 # or explicitly provide a database name/binding
@@ -277,6 +296,6 @@ See the [Wrangler types documentation](https://developers.cloudflare.com/workers
 Pass the `CloudflareBindings` as generics when instantiating `Hono`:
 
 ```ts
-// src/index.ts
+// apps/api/src/index.ts
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 ```

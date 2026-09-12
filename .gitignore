@@ -1,5 +1,6 @@
 # prod
 dist/
+**/dist/
 db/generated/
 
 # dev
@@ -15,6 +16,8 @@ db/generated/
 # deps
 node_modules/
 .wrangler
+.npm-cache/
+.pnpm-store/
 
 # env
 .env

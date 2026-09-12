@@ -8,6 +8,7 @@ import { once } from 'node:events'
 import { spawnSync } from 'node:child_process'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
+const DEFAULT_WRANGLER_CONFIG = 'apps/api/wrangler.jsonc'
 
 const DATASETS = [
   {
@@ -119,6 +120,7 @@ Options:
   --local            Apply to local D1 database (default when --apply is used)
   --remote           Apply to remote Cloudflare D1 database
   --output <path>    Seed SQL output path (default: db/generated/seed-d1.sql)
+  --config <path>    Wrangler config path (default: apps/api/wrangler.jsonc)
   --batch-size <n>   Rows per INSERT statement (default: 25)
   --no-drop          Do not DROP existing dataset tables before creating them
   --schema-only      Create schema/indexes but skip row INSERTs
@@ -137,6 +139,7 @@ function parseArgs(argv) {
     apply: false,
     remote: false,
     output: 'db/generated/seed-d1.sql',
+    config: DEFAULT_WRANGLER_CONFIG,
     batchSize: 25,
     drop: true,
     schemaOnly: false,
@@ -159,6 +162,8 @@ function parseArgs(argv) {
       args.remote = true
     } else if (arg === '--output') {
       args.output = argv[++i]
+    } else if (arg === '--config') {
+      args.config = argv[++i]
     } else if (arg === '--batch-size') {
       args.batchSize = Number(argv[++i])
     } else if (arg === '--no-drop') {
@@ -186,6 +191,7 @@ function parseArgs(argv) {
   }
 
   args.output = resolve(ROOT, args.output)
+  args.config = resolve(ROOT, args.config)
   return args
 }
 
@@ -491,9 +497,22 @@ async function buildSeed(args) {
 }
 
 function applySeed(args) {
-  const wranglerArgs = ['wrangler', 'd1', 'execute', args.db, args.remote ? '--remote' : '--local', `--file=${args.output}`]
-  console.log(`Applying seed with: npx ${wranglerArgs.join(' ')}`)
-  const result = spawnSync('npx', wranglerArgs, {
+  const wranglerArgs = [
+    'exec',
+    '--workspace',
+    '@hackkentucky-slackers/api',
+    '--',
+    'wrangler',
+    '--config',
+    args.config,
+    'd1',
+    'execute',
+    args.db,
+    args.remote ? '--remote' : '--local',
+    `--file=${args.output}`,
+  ]
+  console.log(`Applying seed with: npm ${wranglerArgs.join(' ')}`)
+  const result = spawnSync('npm', wranglerArgs, {
     cwd: ROOT,
     stdio: 'inherit',
     shell: process.platform === 'win32',
@@ -517,8 +536,8 @@ try {
     applySeed(args)
   } else {
     console.log('\nApply it with:')
-    console.log(`  pnpm wrangler d1 execute <DATABASE_NAME_OR_BINDING> --local --file=${output}`)
-    console.log(`  pnpm wrangler d1 execute <DATABASE_NAME_OR_BINDING> --remote --file=${output}`)
+    console.log(`  npm exec --workspace @hackkentucky-slackers/api -- wrangler --config apps/api/wrangler.jsonc d1 execute <DATABASE_NAME_OR_BINDING> --local --file=${output}`)
+    console.log(`  npm exec --workspace @hackkentucky-slackers/api -- wrangler --config apps/api/wrangler.jsonc d1 execute <DATABASE_NAME_OR_BINDING> --remote --file=${output}`)
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)

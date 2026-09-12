@@ -1,17 +1,26 @@
 {
   "name": "hackkentucky-slackers",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @hackkentucky-slackers/api\" \"npm run dev -w @hackkentucky-slackers/web\"",
+    "dev:api": "npm run dev -w @hackkentucky-slackers/api",
+    "dev:web": "npm run dev -w @hackkentucky-slackers/web",
+    "build": "npm run build --workspaces",
+    "build:api": "npm run build -w @hackkentucky-slackers/api",
+    "build:web": "npm run build -w @hackkentucky-slackers/web",
+    "preview:api": "npm run preview -w @hackkentucky-slackers/api",
+    "deploy:api": "npm run deploy -w @hackkentucky-slackers/api",
+    "cf-typegen": "npm run cf-typegen -w @hackkentucky-slackers/api",
     "seed:d1": "node scripts/seed-d1.mjs"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "hono": "^4.13.7"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "wrangler": "^4.110.0"
+    "concurrently": "^10.0.5"
   }
 }

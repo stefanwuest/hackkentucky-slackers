@@ -1,6 +1,6 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hackkentucky-slackers",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "hackkentucky-slackers-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-11",
   "d1_databases": [
