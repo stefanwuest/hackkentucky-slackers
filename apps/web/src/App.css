@@ -1632,9 +1632,13 @@ tr:hover .sticky-action-column {
 }
 
 .prospect-method-card:disabled .prospect-method-image-placeholder {
-  border-color: #e5e7eb;
   color: #9ca3af;
   background: #eef0f3;
+}
+
+.prospect-method-card:disabled .prospect-method-image-placeholder[data-has-image="true"] {
+  background: transparent;
+  filter: grayscale(1);
 }
 
 .prospect-method-card:disabled .prospect-coming-soon {
@@ -1655,7 +1659,7 @@ tr:hover .sticky-action-column {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid #d1d5db;
+  border: 0;
   border-radius: 14px;
   color: #6b7280;
   background:
@@ -1668,12 +1672,26 @@ tr:hover .sticky-action-column {
   text-transform: uppercase;
 }
 
-.prospect-method-card[data-active="true"] .prospect-method-image-placeholder {
+.prospect-method-image-placeholder[data-has-image="true"] {
+  height: auto;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+}
+
+.prospect-method-card[data-active="true"] .prospect-method-image-placeholder:not([data-has-image="true"]) {
   color: #374151;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0 25%, transparent 25% 50%, rgba(255, 255, 255, 0.32) 50% 75%, transparent 75%),
     #d1d5db;
   background-size: 18px 18px;
+}
+
+.prospect-method-image-placeholder img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .prospect-method-copy {
@@ -1694,8 +1712,8 @@ tr:hover .sticky-action-column {
 
 .prospect-method-copy strong {
   color: #172033;
-  font-size: 1.08rem;
-  font-weight: 700;
+  font-size: 1.24rem;
+  font-weight: 600;
   line-height: 1.25;
 }
 
@@ -1879,6 +1897,11 @@ tr:hover .sticky-action-column {
     flex-basis: 72px;
     border-radius: 12px;
     font-size: 0.62rem;
+  }
+
+  .prospect-method-image-placeholder[data-has-image="true"] {
+    height: auto;
+    border-radius: 0;
   }
 
   .prospect-loading-progress {

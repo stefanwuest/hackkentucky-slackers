@@ -4,25 +4,15 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CakeHeader } from '../components/CakeHeader'
 import { getBusinessCardProfile } from '../features/profile/profileStorage'
 import { readCakeCompany, storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
-import marketingMethodsJson from '../features/prospecting/marketingMethods.json'
 import { formatCoverageType } from '../features/prospecting/formatters'
+import { marketingMethods, type MarketingMethod } from '../features/prospecting/marketingMethods'
 import { type CakeResponse, type Company } from '../features/prospecting/types'
 import { api } from '../lib/api'
-
-type MarketingMethod = {
-  id: string
-  title: string
-  howItWorks: string
-  example: string
-  status: 'available' | 'coming_soon'
-  shortLabel: string
-}
 
 type ProspectLocationState = {
   company?: Company
 }
 
-const marketingMethods = marketingMethodsJson as MarketingMethod[]
 const SUGGESTION_LOADING_STAGES = [
   'Gathering company data...',
   'Analyzing signals...',
@@ -52,10 +42,10 @@ function companyFromState(value: unknown, sponsorEin?: string) {
   return company
 }
 
-function MethodImagePlaceholder({ method }: { method: MarketingMethod }) {
+function MethodImage({ method }: { method: MarketingMethod }) {
   return (
-    <span className="prospect-method-image-placeholder" aria-hidden="true">
-      <span>{method.shortLabel}</span>
+    <span className="prospect-method-image-placeholder" data-has-image={method.imageSrc ? 'true' : 'false'} aria-hidden="true">
+      {method.imageSrc ? <img src={method.imageSrc} alt="" /> : <span>{method.shortLabel}</span>}
     </span>
   )
 }
@@ -191,7 +181,7 @@ export function ProspectMethodsPage() {
                   disabled={!isAvailable || isCreatingCake}
                   onClick={() => void handleCreateCake()}
                 >
-                  <MethodImagePlaceholder method={method} />
+                  <MethodImage method={method} />
                   <span className="prospect-method-copy">
                     <span className="prospect-method-title-row">
                       <strong>{method.title}</strong>
@@ -199,8 +189,8 @@ export function ProspectMethodsPage() {
                     </span>
                     <span>{method.howItWorks}</span>
                   </span>
-                  {isAvailable ? (
-                    <span className="prospect-method-action">{isCreatingCake ? 'Creating cake…' : 'Select'}</span>
+                  {isAvailable && isCreatingCake ? (
+                    <span className="prospect-method-action">Creating cake…</span>
                   ) : null}
                 </button>
               )
