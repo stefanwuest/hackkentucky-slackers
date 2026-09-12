@@ -230,15 +230,16 @@ export function CompaniesPage() {
         },
       },
       {
-        id: 'lives_premium',
+        id: 'covered_lives',
         accessorFn: (row) => row.metrics.total_covered_lives_eoy ?? 0,
-        header: 'Lives / Premium',
-        cell: ({ row }) => (
-          <div className="table-primary-cell compact">
-            <strong>{formatNumber(row.original.metrics.total_covered_lives_eoy)}</strong>
-            <span>{formatCurrency(row.original.metrics.total_earned_premium)}</span>
-          </div>
-        ),
+        header: () => <SortableHeader label="Covered lives" />,
+        cell: ({ row }) => <strong className="table-number-cell">{formatNumber(row.original.metrics.total_covered_lives_eoy)}</strong>,
+      },
+      {
+        id: 'earned_premium',
+        accessorFn: (row) => row.metrics.total_earned_premium ?? 0,
+        header: () => <SortableHeader label="Premium" />,
+        cell: ({ row }) => <span className="table-number-cell muted">{formatCurrency(row.original.metrics.total_earned_premium)}</span>,
       },
       {
         id: 'cake_action',

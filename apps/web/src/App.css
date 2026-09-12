@@ -511,6 +511,21 @@ code {
   line-height: 1.35;
 }
 
+.table-number-cell {
+  display: inline-flex;
+  min-width: 96px;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.table-number-cell.muted {
+  min-width: 118px;
+  color: #4b5565;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .pill,
 .tag-row span {
   display: inline-flex;
