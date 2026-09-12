@@ -18,6 +18,7 @@
     "seed:d1": "node scripts/seed-d1.mjs"
   },
   "dependencies": {
+    "@openrouter/sdk": "^1.2.117",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {

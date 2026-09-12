@@ -19,6 +19,9 @@ export type D1DatabaseLike = {
 export type AppBindings = {
   DB?: D1DatabaseLike
   MY_DB?: D1DatabaseLike
+  OPENROUTER_API_KEY?: string
+  OPENROUTER_APP_TITLE?: string
+  OPENROUTER_HTTP_REFERER?: string
 }
 
 export type RenewalRow = {
