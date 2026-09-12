@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
@@ -9,6 +9,16 @@ import { type CakeResponse } from '../features/prospecting/types'
 import { api, apiUrl } from '../lib/api'
 
 type CakeQueryKey = readonly ['cake', string]
+
+const MAX_CAKE_MESSAGE_CHARACTERS = 110
+
+const CAKE_COLOR_OPTIONS = [
+  { name: 'Pink', background: '#ffd6e6', ink: '#3b1230' },
+  { name: 'Peach', background: '#ffedd5', ink: '#431407' },
+  { name: 'Mint', background: '#d1fae5', ink: '#052e16' },
+  { name: 'Lavender', background: '#e0e7ff', ink: '#1e1b4b' },
+  { name: 'Rose', background: '#fce7f3', ink: '#500724' },
+] as const
 
 function decodeRouteId(value: string | undefined) {
   if (!value) return undefined
@@ -71,6 +81,12 @@ export function CompanyCakePage() {
   const fallbackCakeResponse = routedCakeResponse?.cake.cake_id === cakeId ? routedCakeResponse : undefined
   const [isRegeneratingCakeMessage, setIsRegeneratingCakeMessage] = useState(false)
   const [regenerateError, setRegenerateError] = useState<string | null>(null)
+  const [isEditingCakeText, setIsEditingCakeText] = useState(false)
+  const [cakeTextDraft, setCakeTextDraft] = useState('')
+  const [isSavingCakeText, setIsSavingCakeText] = useState(false)
+  const [cakeTextError, setCakeTextError] = useState<string | null>(null)
+  const [selectedCakeColor, setSelectedCakeColor] = useState<string | null>(null)
+  const cakeTextAreaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const {
     data: cakeResponse,
@@ -89,15 +105,89 @@ export function CompanyCakePage() {
     if (company) storeCakeCompany(company)
   }, [company])
 
+  useEffect(() => {
+    if (!isEditingCakeText) setCakeTextDraft(cake?.message ?? '')
+  }, [cake?.message, isEditingCakeText])
+
+  useEffect(() => {
+    if (!isEditingCakeText) return undefined
+
+    const frameId = window.requestAnimationFrame(() => {
+      cakeTextAreaRef.current?.focus()
+      cakeTextAreaRef.current?.select()
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isEditingCakeText])
+
+  function normalizedCakeTextDraft() {
+    return cakeTextDraft.trim().replace(/\s+/g, ' ')
+  }
+
+  function handleStartEditingCakeText() {
+    setCakeTextDraft(cake?.message ?? '')
+    setCakeTextError(null)
+    setIsEditingCakeText(true)
+  }
+
+  function handleCancelEditingCakeText() {
+    setCakeTextDraft(cake?.message ?? '')
+    setCakeTextError(null)
+    setIsEditingCakeText(false)
+  }
+
+  async function handleSaveCakeText() {
+    if (!cakeId || isSavingCakeText) return
+
+    const message = normalizedCakeTextDraft()
+    if (!message) {
+      setCakeTextError('Cake text cannot be empty.')
+      return
+    }
+
+    if (message.length > MAX_CAKE_MESSAGE_CHARACTERS) {
+      setCakeTextError(`Cake text must be ${MAX_CAKE_MESSAGE_CHARACTERS} characters or fewer.`)
+      return
+    }
+
+    const hasCakeColorChanged = selectedCakeColor !== null && selectedCakeColor !== concept?.palette.secondary
+    if (message === cake?.message && !hasCakeColorChanged) {
+      setIsEditingCakeText(false)
+      setCakeTextError(null)
+      return
+    }
+
+    setCakeTextError(null)
+    setIsSavingCakeText(true)
+
+    try {
+      const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}/message`, {
+        message,
+        cakeColor: selectedCakeColor ?? concept?.palette.secondary,
+      })
+      storeCakeCompany(updatedCakeResponse.company)
+      setCakeTextDraft(updatedCakeResponse.cake.message)
+      setIsEditingCakeText(false)
+      await mutate(updatedCakeResponse, { revalidate: false })
+    } catch (error) {
+      setCakeTextError(error instanceof Error ? error.message : 'Failed to update cake text.')
+    } finally {
+      setIsSavingCakeText(false)
+    }
+  }
+
   async function handleRegenerateCakeMessage() {
-    if (!cakeId || isRegeneratingCakeMessage) return
+    if (!cakeId || isRegeneratingCakeMessage || isSavingCakeText) return
 
     setRegenerateError(null)
+    setCakeTextError(null)
     setIsRegeneratingCakeMessage(true)
 
     try {
       const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}`)
       storeCakeCompany(updatedCakeResponse.company)
+      setCakeTextDraft(updatedCakeResponse.cake.message)
+      setIsEditingCakeText(false)
       await mutate(updatedCakeResponse, { revalidate: false })
     } catch (error) {
       setRegenerateError(error instanceof Error ? error.message : 'Failed to regenerate cake message.')
@@ -110,6 +200,17 @@ export function CompanyCakePage() {
   const generatedImageSrc = cake?.has_image_blob
     ? apiUrl(`/api/cakes/${encodeURIComponent(cake.cake_id)}/image`, { v: cake.image_generated_at ?? cake.updated_at })
     : null
+  const normalizedDraft = normalizedCakeTextDraft()
+  const isCakeTextDraftInvalid = !normalizedDraft || normalizedDraft.length > MAX_CAKE_MESSAGE_CHARACTERS
+  const isCakeTextSaveDisabled = isCakeTextDraftInvalid || isSavingCakeText || isRegeneratingCakeMessage
+  const activeCakeColor = selectedCakeColor ?? concept?.palette.secondary
+  const selectedCakeColorOption = CAKE_COLOR_OPTIONS.find((option) => option.background === activeCakeColor)
+  const cakePreviewStyle = concept
+    ? ({
+        '--cake-preview-bg': activeCakeColor,
+        '--cake-preview-ink': selectedCakeColorOption?.ink ?? concept.palette.ink,
+      } as CSSProperties)
+    : undefined
 
   if (!cakeResponse && isLoading) return <LoadingCompanyFallback />
   if (!cakeResponse && error) return <MissingCompanyFallback message={error.message} />
@@ -143,21 +244,95 @@ export function CompanyCakePage() {
             <article className="cake-output-card">
               <div className="cake-output-header">
                 <div>
-                  <span className="cake-eyebrow">SVG fallback</span>
+                  <span className="cake-eyebrow">Cake text</span>
                   {isRegeneratingCakeMessage ? <p>Regenerating cake copy…</p> : null}
+                  {isSavingCakeText ? <p>Updating cake text and image…</p> : null}
                   {regenerateError ? <p>{regenerateError}</p> : null}
                 </div>
-                <a className="cake-download-button" href={concept.printableSvgDataUrl} download={`${concept.initials.toLowerCase()}-cake-design.svg`}>
-                  Download SVG
-                </a>
+                <div className="cake-output-actions">
+                  {isEditingCakeText ? (
+                    <div className="cake-color-options" aria-label="Cake color options">
+                      {CAKE_COLOR_OPTIONS.map((option) => (
+                        <button
+                          key={option.background}
+                          className={`cake-color-option${activeCakeColor === option.background ? ' cake-color-option-selected' : ''}`}
+                          type="button"
+                          style={{ '--cake-color-option': option.background } as CSSProperties}
+                          aria-label={`Use ${option.name} cake color`}
+                          aria-pressed={activeCakeColor === option.background}
+                          disabled={isSavingCakeText}
+                          onClick={() => setSelectedCakeColor(option.background)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <button
+                      className="cake-icon-button cake-secondary-button"
+                      type="button"
+                      aria-label="Edit cake text"
+                      title="Edit cake text"
+                      disabled={isSavingCakeText}
+                      onClick={handleStartEditingCakeText}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="printable-svg-preview" dangerouslySetInnerHTML={{ __html: concept.printableSvg }} />
+
+              <form
+                className="cake-text-edit-form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleSaveCakeText()
+                }}
+              >
+                <div className="cake-text-edit-stage" style={cakePreviewStyle}>
+                  <div className={`cake-html-preview${isEditingCakeText ? ' cake-preview-editing' : ''}`}>
+                    <p>{concept.hookMessage}</p>
+                  </div>
+                  {isEditingCakeText ? (
+                    <>
+                      <label className="cake-text-editor-label" htmlFor="cake-text-editor">
+                        Cake text
+                      </label>
+                      <textarea
+                        id="cake-text-editor"
+                        ref={cakeTextAreaRef}
+                        className="cake-textarea-overlay"
+                        value={cakeTextDraft}
+                        maxLength={MAX_CAKE_MESSAGE_CHARACTERS}
+                        disabled={isSavingCakeText}
+                        onChange={(event) => setCakeTextDraft(event.target.value)}
+                      />
+                    </>
+                  ) : null}
+                </div>
+
+                {isEditingCakeText ? (
+                  <div className="cake-text-edit-footer">
+                    <span>{cakeTextDraft.length}/{MAX_CAKE_MESSAGE_CHARACTERS}</span>
+                    <div className="cake-text-edit-actions">
+                      <button className="cake-download-button cake-secondary-button" type="button" disabled={isSavingCakeText} onClick={handleCancelEditingCakeText}>
+                        Cancel
+                      </button>
+                      <button className="cake-download-button" type="submit" disabled={isCakeTextSaveDisabled}>
+                        {isSavingCakeText ? 'Saving…' : 'Save text'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {cakeTextError ? <p className="cake-text-edit-error">{cakeTextError}</p> : null}
+              </form>
             </article>
 
             <article className="cake-output-card cake-mockup-card">
               <div className="cake-output-header">
                 <div>
-                  <span className="cake-eyebrow">Generated image</span>
+                  <span className="cake-eyebrow">Preview</span>
                 </div>
               </div>
               <div className="cake-generated-image-frame">
@@ -171,7 +346,7 @@ export function CompanyCakePage() {
           </section>
 
           <section className="cake-action-section" aria-label="Cake actions">
-            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage} onClick={() => void handleRegenerateCakeMessage()}>
+            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage || isSavingCakeText} onClick={() => void handleRegenerateCakeMessage()}>
               {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
             </button>
             <Link className="cake-action-button cake-action-button-primary" to={`/cakes/${encodeURIComponent(cake.cake_id)}/checkout`}>

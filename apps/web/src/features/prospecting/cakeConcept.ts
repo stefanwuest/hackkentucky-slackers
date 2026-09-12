@@ -14,8 +14,6 @@ export type CakeConcept = {
     frosting: string
     ink: string
   }
-  printableSvg: string
-  printableSvgDataUrl: string
   primarySignal: CompanySignal | null
   summary: {
     dbaOrEin: string
@@ -49,46 +47,6 @@ function hashString(value: string) {
   return Math.abs(hash)
 }
 
-function xmlEscape(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-}
-
-function dataUrl(svg: string) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-
-function shorten(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value
-  return `${value.slice(0, maxLength - 1).trim()}…`
-}
-
-function wrapText(value: string, maxLineLength: number, maxLines: number) {
-  const words = value.trim().split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-
-  for (const word of words) {
-    const currentLine = lines.at(-1)
-    if (!currentLine) {
-      lines.push(word)
-      continue
-    }
-
-    if (`${currentLine} ${word}`.length <= maxLineLength) {
-      lines[lines.length - 1] = `${currentLine} ${word}`
-      continue
-    }
-
-    if (lines.length < maxLines) lines.push(word)
-  }
-
-  if (lines.length > maxLines) return lines.slice(0, maxLines)
-  return lines
-}
 
 export function selectPrimarySignal(company: Company) {
   return [...company.signals].sort((a, b) => a.properties.minimum_days_until_renewal - b.properties.minimum_days_until_renewal)[0] ?? null
@@ -155,23 +113,6 @@ export function createCakePrompts(company: Company, hookMessage: string) {
   }
 }
 
-export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>) {
-  const palette = concept.palette
-  const companyName = xmlEscape(shorten(concept.companyName, 34))
-  const messageLines = wrapText(shorten(concept.hookMessage, 110), 22, 4)
-  const firstDy = messageLines.length === 1 ? 0 : -((messageLines.length - 1) * 42) / 2
-  const messageTspans = messageLines
-    .map((line, index) => `<tspan x="450" dy="${index === 0 ? firstDy : 56}">${xmlEscape(line)}</tspan>`)
-    .join('\n    ')
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable message for ${companyName}">
-  <rect width="900" height="900" rx="92" fill="${palette.secondary}"/>
-  <text x="450" y="460" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" fill="${palette.ink}">
-    ${messageTspans}
-  </text>
-</svg>`
-}
-
 export function createCakeConcept(company: Company, generatedCakeMessage?: string): CakeConcept {
   const companyName = getCompanyDisplayName(company)
   const primarySignal = selectPrimarySignal(company)
@@ -181,7 +122,7 @@ export function createCakeConcept(company: Company, generatedCakeMessage?: strin
   const coverageTypes = primarySignal?.properties.coverage_types.map(formatCoverageType) ?? []
   const { designPrompt, mockupPrompt } = createCakePrompts(company, hookMessage)
 
-  const conceptWithoutSvg = {
+  return {
     companyName,
     initials: getCompanyInitials(companyName),
     hookMessage,
@@ -200,13 +141,5 @@ export function createCakeConcept(company: Company, generatedCakeMessage?: strin
       totalEarnedPremium: formatCurrency(company.metrics.total_earned_premium),
       carrierNames: formatList(carrierNames),
     },
-  } satisfies Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>
-
-  const printableSvg = buildPrintableCakeSvg(conceptWithoutSvg)
-
-  return {
-    ...conceptWithoutSvg,
-    printableSvg,
-    printableSvgDataUrl: dataUrl(printableSvg),
-  }
+  } satisfies CakeConcept
 }

@@ -9,7 +9,7 @@ export type OpenAiImageModel = `openai/${string}`
 
 export const DEFAULT_OPENAI_CHAT_MODEL = 'openai/gpt-4o-mini' satisfies OpenAiChatModel
 export const DEFAULT_GEMINI_ADDRESS_LOOKUP_MODEL = 'google/gemini-2.5-flash-lite' satisfies GeminiChatModel
-export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-1-mini' satisfies OpenAiImageModel
+export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-2.5-flare' satisfies OpenAiImageModel
 
 const DEFAULT_APP_TITLE = 'Zywave Prospect Intelligence API'
 
@@ -75,6 +75,7 @@ export type CakeMessageRequest = {
 
 export type CakeImageRequest = {
   cakeMessage: CakeMessageResponse
+  frostingColor?: string
   user?: string
 }
 
@@ -210,9 +211,9 @@ ${prospectInformation}`,
     return response
   }
 
-  async function createCakeImage({ cakeMessage, user }: CakeImageRequest) {
+  async function createCakeImage({ cakeMessage, frostingColor, user }: CakeImageRequest) {
     const validatedCakeMessage = parseCakeMessageResponse(cakeMessage)
-    const prompt = createCakeImagePrompt(validatedCakeMessage)
+    const prompt = createCakeImagePrompt(validatedCakeMessage, frostingColor)
 
     const result = await openRouter.images.generate({
       imageGenerationRequest: {
@@ -303,8 +304,9 @@ function parseJsonObject(content: string) {
   }
 }
 
-function createCakeImagePrompt(cakeMessage: CakeMessageResponse) {
+function createCakeImagePrompt(cakeMessage: CakeMessageResponse, frostingColor?: string) {
   const cakeSize = cakeMessage.cake_size.replace('_', ' ')
+  const colorRequirement = frostingColor ? `\n- Use ${frostingColor} as the dominant glaze / frosting surface color.` : ''
 
   return `Create a square, top-down bakery product mockup of a ${cakeSize} ${cakeMessage.cake_shape} frosted cake for a professional B2B prospecting gift.
 
@@ -313,7 +315,8 @@ The cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
 Requirements:
 - Center the cake in a 1:1 image.
 - Make the inscription highly legible, written with cake print on the cake surface.
-- Do not use any icing or ganache. Do not add any icons to the cake. The cake should appear as an editable print with the text only.
+- The full cake should be covered in one color glaze with the print. No cream.${colorRequirement}
+- The cake should appear as an editable print with the text only.
 - Keep the design warm, clever, polished, and professional.
 - Use tasteful decorations that support an insurance renewal / business outreach theme.
 - Do not include any extra words, logos, watermarks, hands, people, packaging labels, or UI elements.`

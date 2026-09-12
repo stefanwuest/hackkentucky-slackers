@@ -193,6 +193,15 @@ type GenerateCakeRequestBody = {
   max_characters?: unknown
 }
 
+type UpdateCakeTextRequestBody = {
+  message?: unknown
+  text?: unknown
+  cakeColor?: unknown
+  cake_color?: unknown
+}
+
+const MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS = 110
+
 type IntegerParseResult =
   | {
       value: number | undefined
@@ -315,6 +324,19 @@ async function generateCakeAssets(env: AppBindings, company: CompanyResponse, op
   return { cakeMessage, cakeImage }
 }
 
+async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, message: string, cakeColor?: string) {
+  const modelService = createModelQueryServiceFromEnv(env)
+  return modelService.createCakeImage({
+    cakeMessage: {
+      message,
+      cake_size: cake.cake_size,
+      cake_shape: cake.cake_shape,
+    },
+    frostingColor: cakeColor,
+    user: cake.company_id ?? cake.sponsor_ein ?? undefined,
+  })
+}
+
 function base64ToArrayBuffer(base64: string) {
   const base64Content = base64.includes(',') ? base64.slice(base64.indexOf(',') + 1) : base64
   const binary = atob(base64Content.replace(/\s/g, ''))
@@ -347,6 +369,33 @@ function parseCakeMessageOptions(body: unknown): CakeMessageOptions | { error: s
     minCharacters: minCharactersResult.value,
     maxCharacters: maxCharactersResult.value,
   }
+}
+
+function normalizeCakeText(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: string } | { error: string } {
+  if (!isRecord(body)) return { error: 'JSON body with message is required.' }
+
+  const value = (body as UpdateCakeTextRequestBody).message ?? (body as UpdateCakeTextRequestBody).text
+  if (typeof value !== 'string') return { error: 'message must be a string.' }
+
+  const cakeColorValue = (body as UpdateCakeTextRequestBody).cakeColor ?? (body as UpdateCakeTextRequestBody).cake_color
+  if (cakeColorValue !== undefined && cakeColorValue !== null && typeof cakeColorValue !== 'string') {
+    return { error: 'cakeColor must be a hex color string.' }
+  }
+
+  const cakeColor = typeof cakeColorValue === 'string' && cakeColorValue.trim() ? cakeColorValue.trim() : undefined
+  if (cakeColor && !/^#[0-9a-fA-F]{6}$/.test(cakeColor)) return { error: 'cakeColor must be a hex color string.' }
+
+  const message = normalizeCakeText(value)
+  if (!message) return { error: 'message must not be empty.' }
+  if (message.length > MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS) {
+    return { error: `message must be ${MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS} characters or fewer.` }
+  }
+
+  return { message, cakeColor }
 }
 
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
@@ -571,6 +620,63 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
     } catch (error) {
       console.error('Failed to regenerate cake message.', error)
       return c.json({ error: 'Failed to regenerate cake message.' }, 502)
+    }
+  })
+
+  app.put('/api/cakes/:cakeId/message', async (c) => {
+    const cakeId = c.req.param('cakeId')?.trim()
+    if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const cakeTextUpdate = parseCakeTextUpdate(body)
+    if ('error' in cakeTextUpdate) return c.json({ error: cakeTextUpdate.error }, 400)
+
+    const db = getDatabase(c.env)
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured.' }, 500)
+
+    try {
+      const existingCake = await getCakeById(db, cakeId)
+      if (!existingCake) return c.json({ error: 'Cake not found.' }, 404)
+
+      const company = await getCompanyBySponsorEin(db, existingCake.sponsor_ein)
+      if (!company) return c.json({ error: 'Company not found.' }, 404)
+
+      const cakeImage = await generateCakeImageForText(c.env, existingCake, cakeTextUpdate.message, cakeTextUpdate.cakeColor)
+      const imageMimeType = cakeImage.media_type ?? 'image/png'
+      const updatedAt = new Date().toISOString()
+      const updatedCake = await updateCakeMessage(db, {
+        cakeId,
+        message: cakeTextUpdate.message,
+        cakeSize: existingCake.cake_size,
+        cakeShape: existingCake.cake_shape,
+        imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
+        imageMimeType,
+        imageFilename: createCakeImageFilename(cakeId, imageMimeType),
+        imageGeneratedAt: updatedAt,
+        updatedAt,
+      })
+
+      if (!updatedCake) return c.json({ error: 'Cake not found.' }, 404)
+
+      return c.json(cakeResponse(updatedCake, company))
+    } catch (error) {
+      console.error('Failed to update cake message.', error)
+      return c.json({ error: 'Failed to update cake message.' }, 502)
     }
   })
 
