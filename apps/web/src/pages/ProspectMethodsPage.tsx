@@ -140,7 +140,7 @@ export function ProspectMethodsPage() {
         <div className="prospect-board-background" aria-hidden="true" />
 
         <section className="prospect-board-intro">
-          <p>Suggestions for</p>
+          <p>Tailored outreach suggestions for</p>
           <h1>{companyName}</h1>
           <div className="prospect-context-row" aria-label="Prospect context">
             {company.location.city || company.location.state ? (

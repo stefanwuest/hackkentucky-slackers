@@ -1477,6 +1477,7 @@ tr:hover .sticky-action-column {
   color: #6b7280;
   font-size: 0.95rem;
   font-weight: 600;
+  letter-spacing: 0.015em;
 }
 
 .prospect-board-intro h1 {
