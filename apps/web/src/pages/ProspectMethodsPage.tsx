@@ -149,7 +149,6 @@ export function ProspectMethodsPage() {
               </span>
             ) : null}
             {primarySignal ? <span>{primarySignal.label}</span> : null}
-            {primarySignal ? <span>{primarySignal.properties.minimum_days_until_renewal} days out</span> : null}
             {coverageTypes.length > 0 ? <span>{coverageTypes.slice(0, 2).map(formatCoverageType).join(' + ')}</span> : null}
           </div>
         </section>
@@ -191,7 +190,12 @@ export function ProspectMethodsPage() {
                   </span>
                   {isAvailable && isCreatingCake ? (
                     <span className="prospect-method-action">Creating cake…</span>
-                  ) : null}
+                  ) : (
+                    <span className="prospect-method-proof" aria-label={`${method.proofMetric} ${method.proofReason}`}>
+                      <span className="prospect-method-proof-metric">{method.proofMetric}</span>
+                      <span className="prospect-method-proof-reason">{method.proofReason}</span>
+                    </span>
+                  )}
                 </button>
               )
             })}

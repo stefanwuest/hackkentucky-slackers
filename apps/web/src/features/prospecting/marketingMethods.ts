@@ -11,53 +11,65 @@ export type MarketingMethod = {
   example: string
   status: 'available' | 'coming_soon'
   shortLabel: string
+  proofMetric: string
+  proofReason: string
   imageSrc?: string
 }
 
 export const marketingMethods: MarketingMethod[] = [
   {
     id: 'cake',
-    title: 'Deliver a cake',
-    howItWorks: 'A cake iced with “Another year older. Another renewal.” Include a short personal note.',
-    example: 'Time it ahead of a confirmed renewal planning window.',
+    title: 'Deliver a tailored cake',
+    howItWorks: 'Generate a company-specific cake message from the prospect’s renewal timing and benefits context, then send it as a memorable opener.',
+    example: 'Use the tailored message to start the renewal conversation before the planning window gets crowded.',
     status: 'available',
     shortLabel: 'Cake',
+    proofMetric: '100%',
+    proofReason: 'open rate — it has to be received in person.',
     imageSrc: cakeDeliveryImage,
   },
   {
     id: 'miniature-marching-band',
     title: 'A miniature marching band',
-    howItWorks: 'A short, prearranged performance celebrating the HR team.',
-    example: '“Your benefits team deserves more fanfare.” Particularly suited to an employee appreciation event.',
+    howItWorks: 'Arrange a short, preplanned performance that gives the HR team a little well-earned fanfare.',
+    example: 'Best near an employee appreciation moment, with a clear sponsor intro after the applause.',
     status: 'coming_soon',
     shortLabel: 'Band',
+    proofMetric: '30 sec',
+    proofReason: 'of fanfare makes the HR team the moment.',
     imageSrc: mariachiBandImage,
   },
   {
     id: 'cameo-message',
     title: 'A personalized Cameo',
-    howItWorks: 'Book a short celebrity-style video shoutout that names the company and renewal season.',
+    howItWorks: 'Book a short celebrity-style shoutout tailored to the company, HR team, and renewal season.',
     example: 'Use it as a playful opener, then follow with one practical renewal planning takeaway.',
     status: 'coming_soon',
     shortLabel: 'Cameo',
+    proofMetric: '1:1',
+    proofReason: 'video gives the outreach a face and a name.',
     imageSrc: cameosImage,
   },
   {
     id: 'renewal-flowers',
     title: 'A renewal flower delivery',
-    howItWorks: 'Send a bright bouquet with a concise note thanking the benefits team for the work ahead.',
+    howItWorks: 'Send a bright bouquet with a concise, appreciative note for the benefits team’s work ahead.',
     example: 'Pair the delivery with a simple timeline for getting ahead of renewal decisions.',
     status: 'coming_soon',
     shortLabel: 'Flowers',
+    proofMetric: '1 delivery',
+    proofReason: 'keeps the message visible after the first read.',
     imageSrc: flowersImage,
   },
   {
     id: 'coffee-cart-custom-drinks',
     title: 'A coffee cart with custom drink names',
-    howItWorks: 'Serve “The Open Enrollment Espresso” and “The Renewal Recovery Latte.”',
-    example: 'Give HR credit for hosting the break; introduce the sponsoring broker clearly.',
+    howItWorks: 'Bring in a coffee cart with renewal-themed drinks named for the company or benefits team.',
+    example: 'Give HR credit for hosting the break, then introduce the sponsoring broker clearly.',
     status: 'coming_soon',
     shortLabel: 'Coffee',
+    proofMetric: '20 min',
+    proofReason: 'team break earns attention before the pitch.',
     imageSrc: coffeeCartImage,
   },
   // Hidden until matching image assets are available:
