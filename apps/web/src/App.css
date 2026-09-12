@@ -207,7 +207,6 @@ button {
 .cake-home-header p {
   max-width: 340px;
   margin: 0 0 0 auto;
-  color: #7c2d12;
   font-size: clamp(0.72rem, 0.95vw, 0.86rem);
   font-weight: 600;
   line-height: 1.3;

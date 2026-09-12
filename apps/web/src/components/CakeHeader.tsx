@@ -25,7 +25,9 @@ export function CakeHeader({ showHomeLink = false, homeLinkTo = '/', homeLinkLab
       <h1>
         <img className="cake-home-logo" src={cakeMyProspectLogo} alt="Prospect Party, Powered by Zywave" />
       </h1>
-      <p>Start the conversation today.</p>
+      <p>
+        Know who to wow. Know how. <br/>
+        Start the conversation today.</p>
     </header>
   )
 }
