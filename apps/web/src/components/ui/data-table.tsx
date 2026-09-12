@@ -2,6 +2,7 @@ import * as React from 'react'
 import {
   type ColumnDef,
   type FilterFn,
+  type OnChangeFn,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -19,6 +20,9 @@ type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   searchPlaceholder?: string
+  searchValue?: string
+  onSearchValueChange?: (value: string) => void
+  hideSearch?: boolean
   emptyMessage?: string
   className?: string
   getRowId?: (originalRow: TData, index: number, parent?: unknown) => string
@@ -40,12 +44,22 @@ function DataTable<TData, TValue>({
   columns,
   data,
   searchPlaceholder = 'Filter results...',
+  searchValue,
+  onSearchValueChange,
+  hideSearch = false,
   emptyMessage = 'No results.',
   className,
   getRowId,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
-  const [globalFilter, setGlobalFilter] = React.useState('')
+  const [internalGlobalFilter, setInternalGlobalFilter] = React.useState('')
+  const globalFilter = searchValue ?? internalGlobalFilter
+
+  const setGlobalFilter: OnChangeFn<string> = (updater) => {
+    const nextValue = typeof updater === 'function' ? updater(globalFilter) : updater
+    if (onSearchValueChange) onSearchValueChange(nextValue)
+    else setInternalGlobalFilter(nextValue)
+  }
 
   const globalContainsFilter: FilterFn<TData> = (row, _columnId, filterValue) => {
     const needle = String(filterValue ?? '').trim().toLowerCase()
@@ -77,17 +91,19 @@ function DataTable<TData, TValue>({
 
   return (
     <div className={cn('w-full', className)}>
-      <div className="flex items-center gap-2 py-4">
-        <Input
-          aria-label="Filter table"
-          value={globalFilter}
-          onChange={(event) => setGlobalFilter(event.target.value)}
-          placeholder={searchPlaceholder}
-          className="max-w-sm"
-        />
-      </div>
+      {!hideSearch && (
+        <div className="flex items-center gap-2 py-4">
+          <Input
+            aria-label="Filter table"
+            value={globalFilter}
+            onChange={(event) => setGlobalFilter(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="max-w-sm"
+          />
+        </div>
+      )}
 
-      <div className="w-full overflow-x-auto rounded-md border">
+      <div className="w-full overflow-x-auto rounded-md border bg-white">
         <table className="w-full min-w-max caption-bottom text-sm">
           <thead className="[&_tr]:border-b">
             {table.getHeaderGroups().map((headerGroup) => (
