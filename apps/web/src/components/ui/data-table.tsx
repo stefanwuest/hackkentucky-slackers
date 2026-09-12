@@ -76,7 +76,7 @@ function DataTable<TData, TValue>({
     },
     initialState: {
       pagination: {
-        pageSize: 10,
+        pageSize: 25,
       },
     },
     globalFilterFn: globalContainsFilter,
@@ -155,7 +155,7 @@ function DataTable<TData, TValue>({
       <div className="flex items-center justify-between gap-4 py-4">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <span>
-            Showing {table.getFilteredRowModel().rows.length} out of {data.length}
+            Showing {table.getRowModel().rows.length} out of {table.getFilteredRowModel().rows.length}
           </span>
           <span>
             Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
