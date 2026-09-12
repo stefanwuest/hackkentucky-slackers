@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 
+import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel } from '../components/ui/sidebar'
-import { API_BASE_URL } from '../features/prospecting/constants'
+import { API_BASE_URL, stateOptions } from '../features/prospecting/constants'
 import { formatCoverageType, formatCurrency, formatNumber } from '../features/prospecting/formatters'
 import {
   defaultSelectedProspectSignalIds,
@@ -82,9 +83,9 @@ function intersectCategoryCompanyMaps(categoryCompanyMaps: Array<Map<string, Com
   })
 }
 
-async function fetchSignalCompanies(signal: ProspectSignalDefinition, abortSignal: AbortSignal) {
+async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: string, abortSignal: AbortSignal) {
   const params = new URLSearchParams({
-    state: DEFAULT_COMPANY_STATE,
+    state,
     signal: 'upcoming_renewal',
     limit: COMPANY_RESULTS_LIMIT,
   })
@@ -98,6 +99,7 @@ async function fetchSignalCompanies(signal: ProspectSignalDefinition, abortSigna
 }
 
 export function CompaniesPage() {
+  const [selectedState, setSelectedState] = useState(DEFAULT_COMPANY_STATE)
   const [selectedSignalIds, setSelectedSignalIds] = useState<ProspectSignalId[]>(defaultSelectedProspectSignalIds)
   const [tableSearch, setTableSearch] = useState('')
   const [companyData, setCompanyData] = useState<CompaniesResponse | null>(null)
@@ -207,7 +209,7 @@ export function CompaniesPage() {
         const categoryCompanyMaps = await Promise.all(
           [...selectedSignalsByCategory.values()].map(async (signals) => {
             const companyResults = await Promise.all(
-              signals.map((signal) => fetchSignalCompanies(signal, abortController.signal)),
+              signals.map((signal) => fetchSignalCompanies(signal, selectedState, abortController.signal)),
             )
             const companyMap = new Map<string, Company>()
             companyResults.flat().forEach((company) => addCompanyToMap(companyMap, company))
@@ -227,7 +229,7 @@ export function CompaniesPage() {
     void loadResults()
 
     return () => abortController.abort()
-  }, [selectedSignalIds])
+  }, [selectedSignalIds, selectedState])
 
   function handleSignalToggle(signalId: ProspectSignalId, checked: boolean) {
     setSelectedSignalIds((previousSignalIds) => {
@@ -249,13 +251,28 @@ export function CompaniesPage() {
       <div className="faceted-page">
         <Sidebar className="signals-sidebar" aria-label="Company signal filters">
           <SidebarContent>
-          <Input
-            aria-label="Filter companies"
-            value={tableSearch}
-            onChange={(event) => setTableSearch(event.target.value)}
-            placeholder="Search companies..."
-            className="sidebar-search"
-          />
+            <Input
+              aria-label="Filter companies"
+              value={tableSearch}
+              onChange={(event) => setTableSearch(event.target.value)}
+              placeholder="Search companies..."
+              className="sidebar-search"
+            />
+
+            <label className="filter-field filter-field-state">
+              State
+              <Combobox
+                options={stateOptions.map((option) => ({
+                  value: option.value,
+                  label: `${option.value} — ${option.label}`,
+                }))}
+                value={selectedState}
+                onValueChange={setSelectedState}
+                placeholder="Select state"
+                searchPlaceholder="Search states..."
+                emptyMessage="No state found."
+              />
+            </label>
 
           {prospectSignalGroups.map((group) => (
             <SidebarGroup key={group.id}>

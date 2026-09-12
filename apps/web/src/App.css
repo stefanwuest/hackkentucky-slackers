@@ -175,6 +175,10 @@ button {
   padding: 12px 0 0;
 }
 
+.signals-sidebar .filter-field-state {
+  flex: 0 0 auto;
+}
+
 .facet-list {
   display: flex;
   flex-direction: column;
