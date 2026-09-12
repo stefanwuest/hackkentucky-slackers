@@ -1,2 +1,4 @@
-ALTER TABLE "cakes" ADD COLUMN "cake_size" TEXT NOT NULL DEFAULT '8in' CHECK ("cake_size" IN ('6in', '8in', '10in', '12in', 'half_sheet', 'sheet'));
-ALTER TABLE "cakes" ADD COLUMN "cake_shape" TEXT NOT NULL DEFAULT 'round' CHECK ("cake_shape" IN ('round', 'square'));
+-- No-op: cake_size and cake_shape are part of the generated seed schema.
+-- This file remains so environments that have not recorded migration 0001 can advance
+-- without failing on duplicate columns.
+SELECT 1;

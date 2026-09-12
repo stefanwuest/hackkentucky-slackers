@@ -1,6 +1,6 @@
 import { OpenRouter } from '@openrouter/sdk'
 import type { ChatJsonSchemaConfig, ChatMessages, ChatResult } from '@openrouter/sdk/models'
-import { CAKE_SHAPES, CAKE_SIZES, type AppBindings, type CakeShape, type CakeSize } from '../types'
+import { CAKE_COLORS, CAKE_SHAPES, CAKE_SIZES, isCakeColor, type AppBindings, type CakeColor, type CakeShape, type CakeSize } from '../types'
 
 export type OpenAiChatModel = `openai/${string}`
 export type GeminiChatModel = `google/${string}`
@@ -9,7 +9,7 @@ export type OpenAiImageModel = `openai/${string}`
 
 export const DEFAULT_OPENAI_CHAT_MODEL = 'openai/gpt-4o-mini' satisfies OpenAiChatModel
 export const DEFAULT_GEMINI_ADDRESS_LOOKUP_MODEL = 'google/gemini-2.5-flash-lite' satisfies GeminiChatModel
-export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-1-mini' satisfies OpenAiImageModel
+export const DEFAULT_OPENAI_IMAGE_MODEL = 'openai/gpt-image-2.5-flare' satisfies OpenAiImageModel
 
 const DEFAULT_APP_TITLE = 'Zywave Prospect Intelligence API'
 
@@ -28,8 +28,13 @@ const CAKE_MESSAGE_SCHEMA = {
       type: 'string',
       enum: CAKE_SHAPES,
     },
+    cake_color: {
+      type: 'string',
+      enum: CAKE_COLORS,
+      description: 'One exact high-contrast frosting color hex code from the allowed options.',
+    },
   },
-  required: ['message', 'cake_size', 'cake_shape'],
+  required: ['message', 'cake_size', 'cake_shape', 'cake_color'],
 } as const
 
 const COMPANY_ADDRESS_CANDIDATE_SCHEMA = {
@@ -65,16 +70,26 @@ export type CakeMessageResponse = {
   message: string
   cake_size: CakeSize
   cake_shape: CakeShape
+  cake_color: CakeColor
+}
+
+export type BusinessCardProfile = {
+  name: string
+  company: string
+  phoneNumber: string
 }
 
 export type CakeMessageRequest = {
   prospectInformation: string
+  businessCardProfile?: BusinessCardProfile
   minCharacters?: number
   maxCharacters?: number
 }
 
 export type CakeImageRequest = {
   cakeMessage: CakeMessageResponse
+  businessCardProfile?: BusinessCardProfile
+  frostingColor?: string
   user?: string
 }
 
@@ -193,12 +208,15 @@ Requirements:
 - Keep it short enough to fit naturally on a cake.
 - Recommend a cake_size from: ${CAKE_SIZES.join(', ')}.
 - Recommend a cake_shape from: ${CAKE_SHAPES.join(', ')}.
+- Recommend a cake_color from these exact high-contrast frosting colors: ${CAKE_COLORS.join(', ')}.
+- Use white lettering on the frosting so the inscription is highly legible.
 - Be clever, warm, and professional.
+- Only write the witty prospect-facing cake message. Do not include sender business card details, sender names, sender companies, phone numbers, signatures, or contact information in the message.
 - Avoid sounding pushy, creepy, overly salesy, or generic.
 - Do not mention that you are an AI.
 - Do not include quotation marks around the message.
 - Return only JSON matching the provided schema.`,
-      userPrompt: `Write the cake message using the prospect information below.
+      userPrompt: `Write the cake message using only the prospect information below.
 
 Prospect information:
 ${prospectInformation}`,
@@ -210,9 +228,9 @@ ${prospectInformation}`,
     return response
   }
 
-  async function createCakeImage({ cakeMessage, user }: CakeImageRequest) {
+  async function createCakeImage({ cakeMessage, businessCardProfile, frostingColor, user }: CakeImageRequest) {
     const validatedCakeMessage = parseCakeMessageResponse(cakeMessage)
-    const prompt = createCakeImagePrompt(validatedCakeMessage)
+    const prompt = createCakeImagePrompt(validatedCakeMessage, frostingColor, businessCardProfile)
 
     const result = await openRouter.images.generate({
       imageGenerationRequest: {
@@ -303,20 +321,31 @@ function parseJsonObject(content: string) {
   }
 }
 
-function createCakeImagePrompt(cakeMessage: CakeMessageResponse) {
+function formatBusinessCardProfile(profile: BusinessCardProfile) {
+  return `${profile.name} • ${profile.company} • ${profile.phoneNumber}`
+}
+
+function createCakeImagePrompt(cakeMessage: CakeMessageResponse, frostingColor?: string, businessCardProfile?: BusinessCardProfile) {
   const cakeSize = cakeMessage.cake_size.replace('_', ' ')
+  const cakeColor = frostingColor ?? cakeMessage.cake_color
+  const colorRequirement = `\n- Use ${cakeColor} as the dominant glaze / frosting surface color.`
+  const businessCardInformation = businessCardProfile ? formatBusinessCardProfile(businessCardProfile) : null
+  const businessCardRequirement = businessCardInformation
+    ? `\n- After the main inscription, add the sender business card information on the cake frosting itself, exactly as this smaller secondary line: ${JSON.stringify(businessCardInformation)}\n- Place the sender line below the main inscription or near the lower rim of the cake, in small but readable letters.\n- Keep the sender line clearly less prominent than the main cake inscription; the main inscription must remain the visual headline.\n- Do not put the sender business card information on a separate card, label, box, tag, or anything outside the cake.`
+    : ''
 
   return `Create a square, top-down bakery product mockup of a ${cakeSize} ${cakeMessage.cake_shape} frosted cake for a professional B2B prospecting gift.
 
-The cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
+The main cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
 
 Requirements:
 - Center the cake in a 1:1 image.
-- Make the inscription highly legible, written with cake print on the cake surface.
-- Do not use any icing or ganache. Do not add any icons to the cake. The cake should appear as an editable print with the text only.
+- Make the main cake inscription the most prominent, largest, and most legible text on the cake.
+- The full cake should be covered in one high-contrast color glaze with white printed lettering on the frosting. No cream.${colorRequirement}${businessCardRequirement}
 - Keep the design warm, clever, polished, and professional.
 - Use tasteful decorations that support an insurance renewal / business outreach theme.
-- Do not include any extra words, logos, watermarks, hands, people, packaging labels, or UI elements.`
+- Do not include any extra words beyond the exact main cake inscription and the provided sender business card information.
+- Do not include logos, watermarks, hands, people, packaging labels, or UI elements.`
 }
 
 function extractGeneratedImage(value: unknown) {
@@ -345,7 +374,9 @@ function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
     typeof value.message !== 'string' ||
     value.message.trim().length === 0 ||
     !isCakeSize(value.cake_size) ||
-    !isCakeShape(value.cake_shape)
+    !isCakeShape(value.cake_shape) ||
+    typeof value.cake_color !== 'string' ||
+    !isCakeColor(value.cake_color)
   ) {
     throw new Error('Model response did not match the cake message schema.')
   }
@@ -354,6 +385,7 @@ function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
     message: value.message,
     cake_size: value.cake_size,
     cake_shape: value.cake_shape,
+    cake_color: value.cake_color,
   }
 }
 

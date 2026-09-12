@@ -128,6 +128,7 @@ export type Cake = {
   message: string
   cake_size: CakeSize
   cake_shape: CakeShape
+  cake_color: string | null
   image_mime_type: string | null
   image_filename: string | null
   image_generated_at: string | null

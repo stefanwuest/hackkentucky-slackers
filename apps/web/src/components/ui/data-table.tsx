@@ -90,7 +90,7 @@ function DataTable<TData, TValue>({
   })
 
   return (
-    <div className={cn('w-full', className)}>
+    <div className={cn('data-table w-full', className)}>
       {!hideSearch && (
         <div className="flex items-center gap-2 py-4">
           <Input
@@ -103,7 +103,7 @@ function DataTable<TData, TValue>({
         </div>
       )}
 
-      <div className="w-full overflow-x-auto rounded-md border bg-white">
+      <div className="data-table-scroll w-full overflow-auto rounded-md border bg-white">
         <table className="w-full min-w-max caption-bottom text-sm">
           <thead className="[&_tr]:border-b">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -161,7 +161,7 @@ function DataTable<TData, TValue>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
+      <div className="data-table-footer flex items-center justify-between gap-4 pt-4">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <span>
             Showing {table.getRowModel().rows.length} out of {table.getFilteredRowModel().rows.length}

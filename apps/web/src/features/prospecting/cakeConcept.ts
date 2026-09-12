@@ -14,8 +14,6 @@ export type CakeConcept = {
     frosting: string
     ink: string
   }
-  printableSvg: string
-  printableSvgDataUrl: string
   primarySignal: CompanySignal | null
   summary: {
     dbaOrEin: string
@@ -33,11 +31,11 @@ export type CakeConcept = {
 type CakePalette = CakeConcept['palette']
 
 const cakePalettes: CakePalette[] = [
-  { primary: '#ff4f8b', secondary: '#ffd6e6', accent: '#7c3aed', frosting: '#fff7fb', ink: '#3b1230' },
-  { primary: '#f97316', secondary: '#ffedd5', accent: '#0ea5e9', frosting: '#fff8ed', ink: '#431407' },
-  { primary: '#10b981', secondary: '#d1fae5', accent: '#f43f5e', frosting: '#f0fdf4', ink: '#052e16' },
-  { primary: '#6366f1', secondary: '#e0e7ff', accent: '#f59e0b', frosting: '#f8fafc', ink: '#1e1b4b' },
-  { primary: '#ec4899', secondary: '#fce7f3', accent: '#14b8a6', frosting: '#fff1f7', ink: '#500724' },
+  { primary: '#fb7185', secondary: '#be123c', accent: '#fbbf24', frosting: '#fff1f2', ink: '#ffffff' },
+  { primary: '#fb923c', secondary: '#c2410c', accent: '#38bdf8', frosting: '#fff7ed', ink: '#ffffff' },
+  { primary: '#10b981', secondary: '#047857', accent: '#f43f5e', frosting: '#ecfdf5', ink: '#ffffff' },
+  { primary: '#818cf8', secondary: '#4f46e5', accent: '#f59e0b', frosting: '#eef2ff', ink: '#ffffff' },
+  { primary: '#ec4899', secondary: '#be185d', accent: '#14b8a6', frosting: '#fdf2f8', ink: '#ffffff' },
 ]
 
 function hashString(value: string) {
@@ -49,46 +47,6 @@ function hashString(value: string) {
   return Math.abs(hash)
 }
 
-function xmlEscape(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-}
-
-function dataUrl(svg: string) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-
-function shorten(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value
-  return `${value.slice(0, maxLength - 1).trim()}…`
-}
-
-function wrapText(value: string, maxLineLength: number, maxLines: number) {
-  const words = value.trim().split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-
-  for (const word of words) {
-    const currentLine = lines.at(-1)
-    if (!currentLine) {
-      lines.push(word)
-      continue
-    }
-
-    if (`${currentLine} ${word}`.length <= maxLineLength) {
-      lines[lines.length - 1] = `${currentLine} ${word}`
-      continue
-    }
-
-    if (lines.length < maxLines) lines.push(word)
-  }
-
-  if (lines.length > maxLines) return lines.slice(0, maxLines)
-  return lines
-}
 
 export function selectPrimarySignal(company: Company) {
   return [...company.signals].sort((a, b) => a.properties.minimum_days_until_renewal - b.properties.minimum_days_until_renewal)[0] ?? null
@@ -155,23 +113,6 @@ export function createCakePrompts(company: Company, hookMessage: string) {
   }
 }
 
-export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>) {
-  const palette = concept.palette
-  const companyName = xmlEscape(shorten(concept.companyName, 34))
-  const messageLines = wrapText(shorten(concept.hookMessage, 110), 22, 4)
-  const firstDy = messageLines.length === 1 ? 0 : -((messageLines.length - 1) * 42) / 2
-  const messageTspans = messageLines
-    .map((line, index) => `<tspan x="450" dy="${index === 0 ? firstDy : 56}">${xmlEscape(line)}</tspan>`)
-    .join('\n    ')
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable message for ${companyName}">
-  <rect width="900" height="900" rx="92" fill="${palette.secondary}"/>
-  <text x="450" y="460" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" fill="${palette.ink}">
-    ${messageTspans}
-  </text>
-</svg>`
-}
-
 export function createCakeConcept(company: Company, generatedCakeMessage?: string): CakeConcept {
   const companyName = getCompanyDisplayName(company)
   const primarySignal = selectPrimarySignal(company)
@@ -181,7 +122,7 @@ export function createCakeConcept(company: Company, generatedCakeMessage?: strin
   const coverageTypes = primarySignal?.properties.coverage_types.map(formatCoverageType) ?? []
   const { designPrompt, mockupPrompt } = createCakePrompts(company, hookMessage)
 
-  const conceptWithoutSvg = {
+  return {
     companyName,
     initials: getCompanyInitials(companyName),
     hookMessage,
@@ -200,13 +141,5 @@ export function createCakeConcept(company: Company, generatedCakeMessage?: strin
       totalEarnedPremium: formatCurrency(company.metrics.total_earned_premium),
       carrierNames: formatList(carrierNames),
     },
-  } satisfies Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>
-
-  const printableSvg = buildPrintableCakeSvg(conceptWithoutSvg)
-
-  return {
-    ...conceptWithoutSvg,
-    printableSvg,
-    printableSvgDataUrl: dataUrl(printableSvg),
-  }
+  } satisfies CakeConcept
 }
