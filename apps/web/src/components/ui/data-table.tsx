@@ -90,7 +90,7 @@ function DataTable<TData, TValue>({
   })
 
   return (
-    <div className={cn('w-full', className)}>
+    <div className={cn('data-table w-full', className)}>
       {!hideSearch && (
         <div className="flex items-center gap-2 py-4">
           <Input
@@ -103,7 +103,7 @@ function DataTable<TData, TValue>({
         </div>
       )}
 
-      <div className="w-full overflow-x-auto rounded-md border bg-white">
+      <div className="data-table-scroll w-full overflow-auto rounded-md border bg-white">
         <table className="w-full min-w-max caption-bottom text-sm">
           <thead className="[&_tr]:border-b">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -111,7 +111,10 @@ function DataTable<TData, TValue>({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
+                    className={cn(
+                      'text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap',
+                      header.column.id === 'cake_action' && 'sticky-action-column sticky-action-column-header',
+                    )}
                     style={{ width: header.getSize() === 150 ? undefined : header.getSize() }}
                   >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
@@ -135,7 +138,13 @@ function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-2 align-middle whitespace-nowrap">
+                    <td
+                      key={cell.id}
+                      className={cn(
+                        'p-2 align-middle whitespace-nowrap',
+                        cell.column.id === 'cake_action' && 'sticky-action-column',
+                      )}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -152,7 +161,7 @@ function DataTable<TData, TValue>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
+      <div className="data-table-footer flex items-center justify-between gap-4 pt-4">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <span>
             Showing {table.getRowModel().rows.length} out of {table.getFilteredRowModel().rows.length}

@@ -381,6 +381,7 @@ function createTableSql(dataset, fields) {
 
 function derivedTableNames() {
   return [
+    'cakes',
     'contract_coverage_types',
     'company_contract_summary',
     'insurance_contracts',
@@ -513,6 +514,22 @@ CREATE TABLE IF NOT EXISTS "company_contract_summary" (
   "total_premium_received" NUMERIC,
   "total_earned_premium" NUMERIC,
   FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "cakes" (
+  "cake_id" TEXT PRIMARY KEY,
+  "sponsor_ein" TEXT NOT NULL,
+  "company_id" TEXT,
+  "message" TEXT NOT NULL,
+  "cake_size" TEXT NOT NULL CHECK ("cake_size" IN ('6in', '8in', '10in', '12in', 'half_sheet', 'sheet')),
+  "cake_shape" TEXT NOT NULL CHECK ("cake_shape" IN ('round', 'square')),
+  "image_blob" BLOB,
+  "image_mime_type" TEXT,
+  "image_filename" TEXT,
+  "image_generated_at" TEXT,
+  "created_at" TEXT NOT NULL,
+  "updated_at" TEXT NOT NULL,
+  FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE SET NULL
 );
 `
 }
@@ -852,6 +869,7 @@ CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_carrier_key" ON "insurance_c
 CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_contract_key" ON "insurance_contracts"("contract_key");
 CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_policy_end_month" ON "insurance_contracts"("policy_end_month");
 CREATE INDEX IF NOT EXISTS "idx_contract_coverage_types_coverage" ON "contract_coverage_types"("coverage_type", "contract_id");
+CREATE INDEX IF NOT EXISTS "idx_cakes_sponsor_ein" ON "cakes"("sponsor_ein");
 `
 }
 

@@ -1,7 +1,5 @@
 import { type DaysOperator } from './types'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-
 export const stateOptions = [
   { value: 'AL', label: 'Alabama' },
   { value: 'AK', label: 'Alaska' },

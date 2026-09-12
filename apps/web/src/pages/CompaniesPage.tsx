@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
+import { Link, useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
 
+import { CakeHeader } from '../components/CakeHeader'
 import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel } from '../components/ui/sidebar'
-import { API_BASE_URL, stateOptions } from '../features/prospecting/constants'
+import { getBusinessCardProfile } from '../features/profile/profileStorage'
+import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
+import { stateOptions } from '../features/prospecting/constants'
 import { formatCoverageType, formatCurrency, formatNumber } from '../features/prospecting/formatters'
 import {
   defaultSelectedProspectSignalIds,
@@ -17,6 +22,7 @@ import {
   type ProspectSignalId,
 } from '../features/prospecting/signals'
 import { type CompaniesResponse, type Company, type CompanySignal } from '../features/prospecting/types'
+import { api } from '../lib/api'
 
 const DEFAULT_COMPANY_STATE = 'KY'
 const COMPANY_RESULTS_LIMIT = '200'
@@ -31,6 +37,22 @@ function signalSortValue(signal: CompanySignal) {
 
 function mergeCompanySignals(signals: CompanySignal[]) {
   return [...signals].sort((a, b) => signalSortValue(a) - signalSortValue(b))
+}
+
+function selectedSignalLabelForCompany(company: Company, signalIds: ProspectSignalId[]) {
+  const signal = primarySignal(company)
+  if (!signal) return 'No signal'
+
+  const daysUntilRenewal = signal.properties.minimum_days_until_renewal
+  const matchingSignalDefinition = signalIds
+    .map((signalId) => prospectSignalDefinitionById[signalId])
+    .find((signalDefinition) => {
+      const greaterThanOrEqual = Number(signalDefinition.companyApiQuery.days_to_renewal_gte ?? Number.NEGATIVE_INFINITY)
+      const lessThanOrEqual = Number(signalDefinition.companyApiQuery.days_to_renewal_lte ?? Number.POSITIVE_INFINITY)
+      return daysUntilRenewal >= greaterThanOrEqual && daysUntilRenewal <= lessThanOrEqual
+    })
+
+  return matchingSignalDefinition?.label ?? signal.label
 }
 
 function mergeCompanies(left: Company, right: Company): Company {
@@ -83,7 +105,9 @@ function intersectCategoryCompanyMaps(categoryCompanyMaps: Array<Map<string, Com
   })
 }
 
-async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: string, abortSignal: AbortSignal) {
+type CompaniesQueryKey = readonly ['companies', string, readonly ProspectSignalId[]]
+
+async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: string) {
   const params = new URLSearchParams({
     state,
     signal: 'upcoming_renewal',
@@ -92,18 +116,50 @@ async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: str
 
   Object.entries(signal.companyApiQuery).forEach(([name, value]) => params.set(name, value))
 
-  const response = await fetch(`${API_BASE_URL}/api/companies?${params}`, { signal: abortSignal })
-  const payload = (await response.json()) as CompaniesResponse
-  if (!response.ok) throw new Error(payload.error ?? 'Unable to load companies.')
+  const payload = await api.get<CompaniesResponse>('/api/companies', { searchParams: params })
   return payload.companies
 }
 
+async function fetchSelectedCompanies([, state, signalIds]: CompaniesQueryKey): Promise<CompaniesResponse> {
+  const selectedSignalsByCategory = groupSelectedSignals([...signalIds])
+  const categoryCompanyMaps = await Promise.all(
+    [...selectedSignalsByCategory.values()].map(async (signals) => {
+      const companyResults = await Promise.all(signals.map((signal) => fetchSignalCompanies(signal, state)))
+      const companyMap = new Map<string, Company>()
+      companyResults.flat().forEach((company) => addCompanyToMap(companyMap, company))
+      return companyMap
+    }),
+  )
+
+  const companies = intersectCategoryCompanyMaps(categoryCompanyMaps)
+  return { count: companies.length, total_count: companies.length, companies }
+}
+
 export function CompaniesPage() {
+  const navigate = useNavigate()
   const [selectedState, setSelectedState] = useState(DEFAULT_COMPANY_STATE)
   const [selectedSignalIds, setSelectedSignalIds] = useState<ProspectSignalId[]>(defaultSelectedProspectSignalIds)
   const [tableSearch, setTableSearch] = useState('')
-  const [companyData, setCompanyData] = useState<CompaniesResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const handleSelectProspect = useCallback(
+    (company: Company) => {
+      const sponsorEin = company.sponsor_ein
+      if (!sponsorEin) return
+
+      storeCakeCompany(company)
+      navigate(`/prospect/${encodeURIComponent(sponsorEin)}`, { state: { company } })
+    },
+    [navigate],
+  )
+
+  const companiesQueryKey = useMemo<CompaniesQueryKey | null>(
+    () => (selectedSignalIds.length > 0 ? ['companies', selectedState, selectedSignalIds] : null),
+    [selectedSignalIds, selectedState],
+  )
+  const {
+    data: companyData,
+    error,
+    isLoading,
+  } = useSWR<CompaniesResponse, Error, CompaniesQueryKey | null>(companiesQueryKey, fetchSelectedCompanies)
 
   const companyColumns = useMemo<ColumnDef<Company>[]>(
     () => [
@@ -132,11 +188,7 @@ export function CompaniesPage() {
         id: 'signal',
         accessorFn: (row) => primarySignal(row)?.severity ?? '',
         header: () => <SortableHeader label="Signal" />,
-        cell: ({ row }) => {
-          const signal = primarySignal(row.original)
-          if (!signal) return 'No signal'
-          return <span className={`pill severity-${signal.severity}`}>{signal.label}</span>
-        },
+        cell: ({ row }) => <span className="pill signal-pill">{selectedSignalLabelForCompany(row.original, selectedSignalIds)}</span>,
       },
       {
         id: 'renewal_date',
@@ -188,48 +240,24 @@ export function CompaniesPage() {
           </div>
         ),
       },
+      {
+        id: 'cake_action',
+        header: 'Outreach',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <button
+            className="cake-it-button"
+            type="button"
+            disabled={!row.original.sponsor_ein}
+            onClick={() => handleSelectProspect(row.original)}
+          >
+            {row.original.sponsor_ein ? "Close 'em" : 'No EIN'}
+          </button>
+        ),
+      },
     ],
-    [],
+    [handleSelectProspect, selectedSignalIds],
   )
-
-  useEffect(() => {
-    if (selectedSignalIds.length === 0) {
-      setCompanyData(null)
-      setError(null)
-      return
-    }
-
-    const abortController = new AbortController()
-
-    async function loadResults() {
-      setError(null)
-
-      try {
-        const selectedSignalsByCategory = groupSelectedSignals(selectedSignalIds)
-        const categoryCompanyMaps = await Promise.all(
-          [...selectedSignalsByCategory.values()].map(async (signals) => {
-            const companyResults = await Promise.all(
-              signals.map((signal) => fetchSignalCompanies(signal, selectedState, abortController.signal)),
-            )
-            const companyMap = new Map<string, Company>()
-            companyResults.flat().forEach((company) => addCompanyToMap(companyMap, company))
-            return companyMap
-          }),
-        )
-
-        const companies = intersectCategoryCompanyMaps(categoryCompanyMaps)
-        setCompanyData({ count: companies.length, total_count: companies.length, companies })
-      } catch (err) {
-        if (abortController.signal.aborted) return
-        setError(err instanceof Error ? err.message : 'Unable to load companies.')
-        setCompanyData(null)
-      }
-    }
-
-    void loadResults()
-
-    return () => abortController.abort()
-  }, [selectedSignalIds, selectedState])
 
   function handleSignalToggle(signalId: ProspectSignalId, checked: boolean) {
     setSelectedSignalIds((previousSignalIds) => {
@@ -241,12 +269,11 @@ export function CompaniesPage() {
   }
 
   const selectedSignalCount = selectedSignalIds.length
+  const businessCardProfile = getBusinessCardProfile()
 
   return (
-    <>
-      <header className="page-header">
-        <h1>Discover prospects</h1>
-      </header>
+    <div className="cake-home-page">
+      <CakeHeader />
 
       <div className="faceted-page">
         <Sidebar className="signals-sidebar" aria-label="Company signal filters">
@@ -299,7 +326,7 @@ export function CompaniesPage() {
           ))}
         </SidebarContent>
 
-        <SidebarFooter>
+        <SidebarFooter className="signals-sidebar-footer">
           <button
             className="clear-filters-button"
             type="button"
@@ -308,17 +335,30 @@ export function CompaniesPage() {
           >
             Clear all filters
           </button>
+
+          {businessCardProfile ? (
+            <Link className="sidebar-profile-card" to="/profile" aria-label="Edit business card profile">
+              <div>
+                <strong>{businessCardProfile.name}</strong>
+                <p>{businessCardProfile.company}</p>
+              </div>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </Link>
+          ) : null}
         </SidebarFooter>
       </Sidebar>
 
       <div className="faceted-main">
-        {error && <div className="notice error">{error}</div>}
+        {error && <div className="notice error">{error.message}</div>}
 
         <section className="results-section">
           {selectedSignalCount === 0 ? (
             <div className="empty-state">Select at least one signal to find matching companies.</div>
           ) : companyData ? (
             <DataTable
+              className="companies-table"
               columns={companyColumns}
               data={companyData.companies}
               searchPlaceholder="Filter companies, locations, carriers, coverages..."
@@ -329,11 +369,11 @@ export function CompaniesPage() {
               getRowId={(row) => row.company_id}
             />
           ) : (
-            !error && <div className="empty-state">Loading companies for the selected signals.</div>
+            isLoading && <div className="empty-state">Loading companies for the selected signals.</div>
           )}
           </section>
         </div>
       </div>
-    </>
+    </div>
   )
 }
