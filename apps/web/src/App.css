@@ -885,16 +885,16 @@ tr:hover .sticky-action-column {
 .cake-color-option {
   width: 28px;
   height: 28px;
-  border: 2px solid rgba(59, 18, 48, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.88);
   border-radius: 999px;
   padding: 0;
   background: var(--cake-color-option);
-  box-shadow: 0 8px 18px rgba(59, 18, 48, 0.1);
+  box-shadow: 0 8px 18px rgba(59, 18, 48, 0.16);
 }
 
 .cake-color-option-selected {
-  border-color: #3b1230;
-  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.18), 0 8px 18px rgba(59, 18, 48, 0.12);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 18, 48, 0.72), 0 8px 18px rgba(59, 18, 48, 0.18);
 }
 
 .cake-color-option:disabled {
@@ -940,8 +940,8 @@ tr:hover .sticky-action-column {
   justify-content: center;
   border-radius: 26px;
   padding: clamp(24px, 8cqw, 72px);
-  color: var(--cake-preview-ink, #3b1230);
-  background: var(--cake-preview-bg, #fce7f3);
+  color: var(--cake-preview-ink, #ffffff);
+  background: var(--cake-preview-bg, #be185d);
 }
 
 .cake-html-preview p {
@@ -978,7 +978,7 @@ tr:hover .sticky-action-column {
   border: 0;
   border-radius: 18px;
   padding: 10px 16px;
-  color: var(--cake-preview-ink, #3b1230);
+  color: var(--cake-preview-ink, #ffffff);
   background: transparent;
   font: inherit;
   font-size: clamp(1.15rem, 6cqw, 2rem);

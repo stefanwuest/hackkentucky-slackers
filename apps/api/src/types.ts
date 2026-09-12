@@ -2,9 +2,15 @@ import type { CoverageType } from './constants'
 
 export const CAKE_SIZES = ['6in', '8in', '10in', '12in', 'half_sheet', 'sheet'] as const
 export const CAKE_SHAPES = ['round', 'square'] as const
+export const CAKE_COLORS = ['#be123c', '#c2410c', '#047857', '#4f46e5', '#be185d'] as const
 
 export type CakeSize = (typeof CAKE_SIZES)[number]
 export type CakeShape = (typeof CAKE_SHAPES)[number]
+export type CakeColor = (typeof CAKE_COLORS)[number]
+
+export function isCakeColor(value: string): value is CakeColor {
+  return (CAKE_COLORS as readonly string[]).includes(value)
+}
 
 export type D1Result<T> = {
   results?: T[]
@@ -166,6 +172,7 @@ export type CakeRow = {
   message: string
   cake_size: CakeSize
   cake_shape: CakeShape
+  cake_color: CakeColor | null
   image_mime_type: string | null
   image_filename: string | null
   image_generated_at: string | null
@@ -181,6 +188,7 @@ export type CakeRecord = {
   message: string
   cake_size: CakeSize
   cake_shape: CakeShape
+  cake_color: CakeColor | null
   image_mime_type: string | null
   image_filename: string | null
   image_generated_at: string | null

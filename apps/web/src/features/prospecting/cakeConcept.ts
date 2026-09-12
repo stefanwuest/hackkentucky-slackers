@@ -31,11 +31,11 @@ export type CakeConcept = {
 type CakePalette = CakeConcept['palette']
 
 const cakePalettes: CakePalette[] = [
-  { primary: '#ff4f8b', secondary: '#ffd6e6', accent: '#7c3aed', frosting: '#fff7fb', ink: '#3b1230' },
-  { primary: '#f97316', secondary: '#ffedd5', accent: '#0ea5e9', frosting: '#fff8ed', ink: '#431407' },
-  { primary: '#10b981', secondary: '#d1fae5', accent: '#f43f5e', frosting: '#f0fdf4', ink: '#052e16' },
-  { primary: '#6366f1', secondary: '#e0e7ff', accent: '#f59e0b', frosting: '#f8fafc', ink: '#1e1b4b' },
-  { primary: '#ec4899', secondary: '#fce7f3', accent: '#14b8a6', frosting: '#fff1f7', ink: '#500724' },
+  { primary: '#fb7185', secondary: '#be123c', accent: '#fbbf24', frosting: '#fff1f2', ink: '#ffffff' },
+  { primary: '#fb923c', secondary: '#c2410c', accent: '#38bdf8', frosting: '#fff7ed', ink: '#ffffff' },
+  { primary: '#10b981', secondary: '#047857', accent: '#f43f5e', frosting: '#ecfdf5', ink: '#ffffff' },
+  { primary: '#818cf8', secondary: '#4f46e5', accent: '#f59e0b', frosting: '#eef2ff', ink: '#ffffff' },
+  { primary: '#ec4899', secondary: '#be185d', accent: '#14b8a6', frosting: '#fdf2f8', ink: '#ffffff' },
 ]
 
 function hashString(value: string) {

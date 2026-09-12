@@ -3,7 +3,7 @@ import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type 
 import { getCakeById, getCakeImageById, insertCake, updateCakeMessage } from '../db/cakes'
 import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
 import { createModelQueryServiceFromEnv, type BusinessCardProfile } from '../services/model-queries'
-import type { AppBindings, CakeRecord, CompanyDetailRow, D1DatabaseLike } from '../types'
+import { CAKE_COLORS, isCakeColor, type AppBindings, type CakeColor, type CakeRecord, type CompanyDetailRow, type D1DatabaseLike } from '../types'
 import { coverageTypeFromDbValue, parseCoverageTypes } from '../utils/coverage'
 import { estimatedRenewalDate, toIsoDate, todayUtc } from '../utils/dates'
 import { matchesDaysToRenewalFilters, parseCompanySignalTypes, parseDaysToRenewalFilters, parseLimit } from '../utils/filters'
@@ -371,22 +371,25 @@ async function generateCakeAssets(env: AppBindings, company: CompanyResponse, op
   const cakeImage = await modelService.createCakeImage({
     cakeMessage,
     businessCardProfile: options.businessCardProfile,
+    frostingColor: cakeMessage.cake_color,
     user: company.company_id ?? company.sponsor_ein ?? undefined,
   })
 
   return { cakeMessage, cakeImage }
 }
 
-async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, message: string, cakeColor?: string, businessCardProfile?: BusinessCardProfile) {
+async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, message: string, cakeColor?: CakeColor, businessCardProfile?: BusinessCardProfile) {
   const modelService = createModelQueryServiceFromEnv(env)
+  const resolvedCakeColor = cakeColor ?? cake.cake_color ?? CAKE_COLORS[0]
   return modelService.createCakeImage({
     cakeMessage: {
       message,
       cake_size: cake.cake_size,
       cake_shape: cake.cake_shape,
+      cake_color: resolvedCakeColor,
     },
     businessCardProfile,
-    frostingColor: cakeColor,
+    frostingColor: resolvedCakeColor,
     user: cake.company_id ?? cake.sponsor_ein ?? undefined,
   })
 }
@@ -433,7 +436,7 @@ function normalizeCakeText(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: string; businessCardProfile?: BusinessCardProfile } | { error: string } {
+function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: CakeColor; businessCardProfile?: BusinessCardProfile } | { error: string } {
   if (!isRecord(body)) return { error: 'JSON body with message is required.' }
 
   const value = (body as UpdateCakeTextRequestBody).message ?? (body as UpdateCakeTextRequestBody).text
@@ -444,8 +447,12 @@ function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: stri
     return { error: 'cakeColor must be a hex color string.' }
   }
 
-  const cakeColor = typeof cakeColorValue === 'string' && cakeColorValue.trim() ? cakeColorValue.trim() : undefined
-  if (cakeColor && !/^#[0-9a-fA-F]{6}$/.test(cakeColor)) return { error: 'cakeColor must be a hex color string.' }
+  const cakeColor = typeof cakeColorValue === 'string' && cakeColorValue.trim() ? cakeColorValue.trim().toLowerCase() : undefined
+  let parsedCakeColor: CakeColor | undefined
+  if (cakeColor) {
+    if (!isCakeColor(cakeColor)) return { error: `cakeColor must be one of: ${CAKE_COLORS.join(', ')}.` }
+    parsedCakeColor = cakeColor
+  }
 
   const businessCardProfile = parseBusinessCardProfile(body)
   if (businessCardProfile && 'error' in businessCardProfile) return { error: businessCardProfile.error }
@@ -456,7 +463,7 @@ function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: stri
     return { error: `message must be ${MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS} characters or fewer.` }
   }
 
-  return { message, cakeColor, businessCardProfile }
+  return { message, cakeColor: parsedCakeColor, businessCardProfile }
 }
 
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
@@ -508,6 +515,7 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
         message: cakeMessage.message,
         cakeSize: cakeMessage.cake_size,
         cakeShape: cakeMessage.cake_shape,
+        cakeColor: cakeMessage.cake_color,
         imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
         imageMimeType,
         imageFilename: createCakeImageFilename(cakeId, imageMimeType),
@@ -668,6 +676,7 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
         message: cakeMessage.message,
         cakeSize: cakeMessage.cake_size,
         cakeShape: cakeMessage.cake_shape,
+        cakeColor: cakeMessage.cake_color,
         imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
         imageMimeType,
         imageFilename: createCakeImageFilename(cakeId, imageMimeType),
@@ -717,7 +726,8 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
       const company = await getCompanyBySponsorEin(db, existingCake.sponsor_ein)
       if (!company) return c.json({ error: 'Company not found.' }, 404)
 
-      const cakeImage = await generateCakeImageForText(c.env, existingCake, cakeTextUpdate.message, cakeTextUpdate.cakeColor, cakeTextUpdate.businessCardProfile)
+      const cakeColor = cakeTextUpdate.cakeColor ?? existingCake.cake_color ?? CAKE_COLORS[0]
+      const cakeImage = await generateCakeImageForText(c.env, existingCake, cakeTextUpdate.message, cakeColor, cakeTextUpdate.businessCardProfile)
       const imageMimeType = cakeImage.media_type ?? 'image/png'
       const updatedAt = new Date().toISOString()
       const updatedCake = await updateCakeMessage(db, {
@@ -725,6 +735,7 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
         message: cakeTextUpdate.message,
         cakeSize: existingCake.cake_size,
         cakeShape: existingCake.cake_shape,
+        cakeColor,
         imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
         imageMimeType,
         imageFilename: createCakeImageFilename(cakeId, imageMimeType),

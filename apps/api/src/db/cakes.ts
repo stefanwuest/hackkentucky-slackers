@@ -1,4 +1,4 @@
-import type { CakeRecord, CakeRow, CakeShape, CakeSize, D1DatabaseLike } from '../types'
+import type { CakeColor, CakeRecord, CakeRow, CakeShape, CakeSize, D1DatabaseLike } from '../types'
 
 type CakeImageRow = {
   image_blob: ArrayBuffer | ArrayBufferView | number[] | string | null
@@ -67,6 +67,7 @@ function cakeRecordFromRow(row: CakeRow): CakeRecord {
     message: row.message,
     cake_size: row.cake_size,
     cake_shape: row.cake_shape,
+    cake_color: row.cake_color,
     image_mime_type: row.image_mime_type,
     image_filename: row.image_filename,
     image_generated_at: row.image_generated_at,
@@ -84,6 +85,7 @@ const CAKE_SELECT_SQL = `
     "message",
     "cake_size",
     "cake_shape",
+    "cake_color",
     "image_mime_type",
     "image_filename",
     "image_generated_at",
@@ -102,6 +104,7 @@ export async function insertCake(
     message: string
     cakeSize: CakeSize
     cakeShape: CakeShape
+    cakeColor: CakeColor
     imageBlob?: ArrayBuffer
     imageMimeType?: string | null
     imageFilename?: string | null
@@ -118,13 +121,14 @@ export async function insertCake(
         "message",
         "cake_size",
         "cake_shape",
+        "cake_color",
         "image_blob",
         "image_mime_type",
         "image_filename",
         "image_generated_at",
         "created_at",
         "updated_at"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       input.cakeId,
@@ -133,6 +137,7 @@ export async function insertCake(
       input.message,
       input.cakeSize,
       input.cakeShape,
+      input.cakeColor,
       input.imageBlob ?? null,
       input.imageMimeType ?? null,
       input.imageFilename ?? null,
@@ -151,6 +156,7 @@ export async function insertCake(
     message: input.message,
     cake_size: input.cakeSize,
     cake_shape: input.cakeShape,
+    cake_color: input.cakeColor,
     image_mime_type: input.imageMimeType ?? null,
     image_filename: input.imageFilename ?? null,
     image_generated_at: input.imageGeneratedAt ?? null,
@@ -192,6 +198,7 @@ export async function updateCakeMessage(
     message: string
     cakeSize: CakeSize
     cakeShape: CakeShape
+    cakeColor: CakeColor
     imageBlob: ArrayBuffer
     imageMimeType: string
     imageFilename: string
@@ -206,6 +213,7 @@ export async function updateCakeMessage(
         "message" = ?,
         "cake_size" = ?,
         "cake_shape" = ?,
+        "cake_color" = ?,
         "image_blob" = ?,
         "image_mime_type" = ?,
         "image_filename" = ?,
@@ -217,6 +225,7 @@ export async function updateCakeMessage(
       input.message,
       input.cakeSize,
       input.cakeShape,
+      input.cakeColor,
       input.imageBlob,
       input.imageMimeType,
       input.imageFilename,

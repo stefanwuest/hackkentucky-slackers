@@ -14,11 +14,11 @@ type CakeQueryKey = readonly ['cake', string]
 const MAX_CAKE_MESSAGE_CHARACTERS = 110
 
 const CAKE_COLOR_OPTIONS = [
-  { name: 'Pink', background: '#ffd6e6', ink: '#3b1230' },
-  { name: 'Peach', background: '#ffedd5', ink: '#431407' },
-  { name: 'Mint', background: '#d1fae5', ink: '#052e16' },
-  { name: 'Lavender', background: '#e0e7ff', ink: '#1e1b4b' },
-  { name: 'Rose', background: '#fce7f3', ink: '#500724' },
+  { name: 'Berry', background: '#be123c', ink: '#ffffff' },
+  { name: 'Spice', background: '#c2410c', ink: '#ffffff' },
+  { name: 'Mint', background: '#047857', ink: '#ffffff' },
+  { name: 'Lavender', background: '#4f46e5', ink: '#ffffff' },
+  { name: 'Rose', background: '#be185d', ink: '#ffffff' },
 ] as const
 
 function decodeRouteId(value: string | undefined) {
@@ -133,6 +133,7 @@ export function CompanyCakePage() {
 
   function handleCancelEditingCakeText() {
     setCakeTextDraft(cake?.message ?? '')
+    setSelectedCakeColor(null)
     setCakeTextError(null)
     setIsEditingCakeText(false)
   }
@@ -151,8 +152,10 @@ export function CompanyCakePage() {
       return
     }
 
-    const hasCakeColorChanged = selectedCakeColor !== null && selectedCakeColor !== concept?.palette.secondary
+    const persistedCakeColor = cake?.cake_color ?? concept?.palette.secondary
+    const hasCakeColorChanged = selectedCakeColor !== null && selectedCakeColor !== persistedCakeColor
     if (message === cake?.message && !hasCakeColorChanged) {
+      setSelectedCakeColor(null)
       setIsEditingCakeText(false)
       setCakeTextError(null)
       return
@@ -164,11 +167,12 @@ export function CompanyCakePage() {
     try {
       const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}/message`, {
         message,
-        cakeColor: selectedCakeColor ?? concept?.palette.secondary,
+        cakeColor: selectedCakeColor ?? cake?.cake_color ?? concept?.palette.secondary,
         businessProfile: getBusinessCardProfile(),
       })
       storeCakeCompany(updatedCakeResponse.company)
       setCakeTextDraft(updatedCakeResponse.cake.message)
+      setSelectedCakeColor(null)
       setIsEditingCakeText(false)
       await mutate(updatedCakeResponse, { revalidate: false })
     } catch (error) {
@@ -191,6 +195,7 @@ export function CompanyCakePage() {
       })
       storeCakeCompany(updatedCakeResponse.company)
       setCakeTextDraft(updatedCakeResponse.cake.message)
+      setSelectedCakeColor(null)
       setIsEditingCakeText(false)
       await mutate(updatedCakeResponse, { revalidate: false })
     } catch (error) {
@@ -207,7 +212,7 @@ export function CompanyCakePage() {
   const normalizedDraft = normalizedCakeTextDraft()
   const isCakeTextDraftInvalid = !normalizedDraft || normalizedDraft.length > MAX_CAKE_MESSAGE_CHARACTERS
   const isCakeTextSaveDisabled = isCakeTextDraftInvalid || isSavingCakeText || isRegeneratingCakeMessage
-  const activeCakeColor = selectedCakeColor ?? concept?.palette.secondary
+  const activeCakeColor = selectedCakeColor ?? cake?.cake_color ?? concept?.palette.secondary
   const selectedCakeColorOption = CAKE_COLOR_OPTIONS.find((option) => option.background === activeCakeColor)
   const cakePreviewStyle = concept
     ? ({
