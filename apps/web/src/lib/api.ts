@@ -22,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-function buildUrl(path: string, searchParams?: QueryParams) {
+export function apiUrl(path: string, searchParams?: QueryParams) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const url = `${API_BASE_URL}${normalizedPath}`
   if (!searchParams) return url
@@ -65,7 +65,7 @@ async function parseResponse(response: Response) {
 }
 
 async function request<T>(method: string, path: string, { searchParams, ...init }: InternalApiRequestOptions = {}) {
-  const response = await fetch(buildUrl(path, searchParams), { ...init, method })
+  const response = await fetch(apiUrl(path, searchParams), { ...init, method })
   const payload = await parseResponse(response)
 
   if (!response.ok) {

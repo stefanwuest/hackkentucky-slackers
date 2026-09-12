@@ -1,11 +1,11 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
 import { createCakeConcept } from '../features/prospecting/cakeConcept'
 import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
 import { type CakeResponse } from '../features/prospecting/types'
-import { api } from '../lib/api'
+import { api, apiUrl } from '../lib/api'
 
 type CakeQueryKey = readonly ['cake', string]
 
@@ -106,6 +106,9 @@ export function CompanyCakePage() {
   }
 
   const concept = useMemo(() => (company && cake ? createCakeConcept(company, cake.message) : null), [cake, company])
+  const generatedImageSrc = cake?.has_image_blob
+    ? apiUrl(`/api/cakes/${encodeURIComponent(cake.cake_id)}/image`, { v: cake.image_generated_at ?? cake.updated_at })
+    : null
 
   if (!cakeResponse && isLoading) return <LoadingCompanyFallback />
   if (!cakeResponse && error) return <MissingCompanyFallback message={error.message} />
@@ -164,26 +167,16 @@ export function CompanyCakePage() {
             <article className="cake-output-card cake-mockup-card">
               <div className="cake-output-header">
                 <div>
-                  <span className="cake-eyebrow">CSS mockup</span>
+                  <span className="cake-eyebrow">Generated image</span>
                   <h2>Cake mockup</h2>
                 </div>
               </div>
-              <div className="cake-mockup-scene" style={{ '--cake-primary': concept.palette.primary, '--cake-secondary': concept.palette.secondary, '--cake-accent': concept.palette.accent } as CSSProperties}>
-                <div className="cake-plate" />
-                <div className="cake-base">
-                  <div className="cake-drip drip-one" />
-                  <div className="cake-drip drip-two" />
-                  <div className="cake-drip drip-three" />
-                  <img src={concept.printableSvgDataUrl} alt={`Cake topper mockup for ${concept.companyName}`} />
-                </div>
-                <div className="cake-layer" />
-                <div className="cake-sprinkles" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </div>
+              <div className="cake-generated-image-frame">
+                {generatedImageSrc ? (
+                  <img className="cake-generated-image" src={generatedImageSrc} alt={`Generated cake mockup for ${concept.companyName}`} />
+                ) : (
+                  <p>No generated cake image is available yet.</p>
+                )}
               </div>
             </article>
           </section>

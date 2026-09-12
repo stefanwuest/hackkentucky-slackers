@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
 import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type CompanySignalType } from '../constants'
-import { getCakeById, insertCake, updateCakeMessage } from '../db/cakes'
+import { getCakeById, getCakeImageById, insertCake, updateCakeMessage } from '../db/cakes'
 import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
 import { createModelQueryServiceFromEnv } from '../services/model-queries'
 import type { AppBindings, CakeRecord, CompanyDetailRow, D1DatabaseLike } from '../types'
@@ -272,6 +272,11 @@ function createCakeId() {
   return `cake_${crypto.randomUUID()}`
 }
 
+function createCakeImageFilename(cakeId: string, mediaType: string) {
+  const extension = mediaType === 'image/jpeg' ? 'jpg' : mediaType === 'image/webp' ? 'webp' : 'png'
+  return `${cakeId}.${extension}`
+}
+
 type CakeMessageOptions = {
   minCharacters?: number
   maxCharacters?: number
@@ -295,12 +300,32 @@ async function getCompanyBySponsorEin(db: D1DatabaseLike, sponsorEin: string) {
   return companyFromRows(queryResult.results ?? [], todayUtc())
 }
 
-async function generateCakeMessage(env: AppBindings, company: CompanyResponse, options: CakeMessageOptions) {
-  return createModelQueryServiceFromEnv(env).createCakeMessage({
+async function generateCakeAssets(env: AppBindings, company: CompanyResponse, options: CakeMessageOptions) {
+  const modelService = createModelQueryServiceFromEnv(env)
+  const cakeMessage = await modelService.createCakeMessage({
     prospectInformation: cakeProspectInformation(company),
     minCharacters: options.minCharacters,
     maxCharacters: options.maxCharacters,
   })
+  const cakeImage = await modelService.createCakeImage({
+    cakeMessage,
+    user: company.company_id ?? company.sponsor_ein ?? undefined,
+  })
+
+  return { cakeMessage, cakeImage }
+}
+
+function base64ToArrayBuffer(base64: string) {
+  const base64Content = base64.includes(',') ? base64.slice(base64.indexOf(',') + 1) : base64
+  const binary = atob(base64Content.replace(/\s/g, ''))
+  const buffer = new ArrayBuffer(binary.length)
+  const bytes = new Uint8Array(buffer)
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+
+  return buffer
 }
 
 function parseCakeMessageOptions(body: unknown): CakeMessageOptions | { error: string } {
@@ -362,15 +387,21 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
     if (!company) return c.json({ error: 'Company not found.' }, 404)
 
     try {
-      const cakeMessage = await generateCakeMessage(c.env, company, cakeMessageOptions)
+      const { cakeMessage, cakeImage } = await generateCakeAssets(c.env, company, cakeMessageOptions)
+      const cakeId = createCakeId()
+      const imageMimeType = cakeImage.media_type ?? 'image/png'
       const now = new Date().toISOString()
       const cake = await insertCake(db, {
-        cakeId: createCakeId(),
+        cakeId,
         sponsorEin,
         companyId: company.company_id,
         message: cakeMessage.message,
         cakeSize: cakeMessage.cake_size,
         cakeShape: cakeMessage.cake_shape,
+        imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
+        imageMimeType,
+        imageFilename: createCakeImageFilename(cakeId, imageMimeType),
+        imageGeneratedAt: now,
         createdAt: now,
       })
 
@@ -409,6 +440,35 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
     }
   })
 
+  app.get('/api/cakes/:cakeId/image', async (c) => {
+    const cakeId = c.req.param('cakeId')?.trim()
+    if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
+
+    const db = getDatabase(c.env)
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    try {
+      const image = await getCakeImageById(db, cakeId)
+      if (!image) return c.json({ error: 'Cake image not found.' }, 404)
+
+      return c.body(image.image_blob, 200, {
+        'Cache-Control': 'private, max-age=300',
+        'Content-Disposition': `inline; filename="${image.image_filename ?? `${cakeId}.png`}"`,
+        'Content-Type': image.image_mime_type,
+      })
+    } catch (error) {
+      console.error('Failed to fetch cake image.', error)
+      return c.json({ error: 'Failed to fetch cake image.' }, 500)
+    }
+  })
+
   app.put('/api/cakes/:cakeId', async (c) => {
     const cakeId = c.req.param('cakeId')?.trim()
     if (!cakeId) return c.json({ error: 'cake_id is required.' }, 400)
@@ -442,13 +502,19 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
       const company = await getCompanyBySponsorEin(db, existingCake.sponsor_ein)
       if (!company) return c.json({ error: 'Company not found.' }, 404)
 
-      const cakeMessage = await generateCakeMessage(c.env, company, cakeMessageOptions)
+      const { cakeMessage, cakeImage } = await generateCakeAssets(c.env, company, cakeMessageOptions)
+      const imageMimeType = cakeImage.media_type ?? 'image/png'
+      const updatedAt = new Date().toISOString()
       const updatedCake = await updateCakeMessage(db, {
         cakeId,
         message: cakeMessage.message,
         cakeSize: cakeMessage.cake_size,
         cakeShape: cakeMessage.cake_shape,
-        updatedAt: new Date().toISOString(),
+        imageBlob: base64ToArrayBuffer(cakeImage.b64_json),
+        imageMimeType,
+        imageFilename: createCakeImageFilename(cakeId, imageMimeType),
+        imageGeneratedAt: updatedAt,
+        updatedAt,
       })
 
       if (!updatedCake) return c.json({ error: 'Cake not found.' }, 404)

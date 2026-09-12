@@ -1,5 +1,64 @@
 import type { CakeRecord, CakeRow, CakeShape, CakeSize, D1DatabaseLike } from '../types'
 
+type CakeImageRow = {
+  image_blob: ArrayBuffer | ArrayBufferView | number[] | string | null
+  image_mime_type: string | null
+  image_filename: string | null
+  image_generated_at: string | null
+}
+
+export type CakeImageRecord = {
+  image_blob: ArrayBuffer
+  image_mime_type: string
+  image_filename: string | null
+  image_generated_at: string | null
+}
+
+function normalizeImageBlob(blob: NonNullable<CakeImageRow['image_blob']>): ArrayBuffer {
+  if (blob instanceof ArrayBuffer) return blob
+
+  if (ArrayBuffer.isView(blob)) {
+    return copyBytesToArrayBuffer(new Uint8Array(blob.buffer, blob.byteOffset, blob.byteLength))
+  }
+
+  if (Array.isArray(blob)) return copyBytesToArrayBuffer(Uint8Array.from(blob))
+  if (typeof blob === 'string') return stringToArrayBuffer(blob)
+
+  throw new Error('Cake image blob has an unsupported format.')
+}
+
+function copyBytesToArrayBuffer(bytes: Uint8Array) {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+  return buffer
+}
+
+function stringToArrayBuffer(value: string) {
+  const content = value.includes(',') ? value.slice(value.indexOf(',') + 1) : value
+  const compactContent = content.replace(/\s/g, '')
+
+  if (/^[A-Za-z0-9+/]*={0,2}$/.test(compactContent) && compactContent.length % 4 === 0) {
+    try {
+      const decoded = atob(compactContent)
+      return binaryStringToArrayBuffer(decoded)
+    } catch {
+      // Fall through and treat the value as a raw binary string.
+    }
+  }
+
+  return binaryStringToArrayBuffer(value)
+}
+
+function binaryStringToArrayBuffer(value: string) {
+  const bytes = new Uint8Array(value.length)
+
+  for (let index = 0; index < value.length; index += 1) {
+    bytes[index] = value.charCodeAt(index) & 0xff
+  }
+
+  return bytes.buffer
+}
+
 function cakeRecordFromRow(row: CakeRow): CakeRecord {
   return {
     cake_id: row.cake_id,
@@ -43,6 +102,10 @@ export async function insertCake(
     message: string
     cakeSize: CakeSize
     cakeShape: CakeShape
+    imageBlob?: ArrayBuffer
+    imageMimeType?: string | null
+    imageFilename?: string | null
+    imageGeneratedAt?: string | null
     createdAt: string
   },
 ) {
@@ -55,9 +118,13 @@ export async function insertCake(
         "message",
         "cake_size",
         "cake_shape",
+        "image_blob",
+        "image_mime_type",
+        "image_filename",
+        "image_generated_at",
         "created_at",
         "updated_at"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       input.cakeId,
@@ -66,6 +133,10 @@ export async function insertCake(
       input.message,
       input.cakeSize,
       input.cakeShape,
+      input.imageBlob ?? null,
+      input.imageMimeType ?? null,
+      input.imageFilename ?? null,
+      input.imageGeneratedAt ?? null,
       input.createdAt,
       input.createdAt,
     )
@@ -80,10 +151,10 @@ export async function insertCake(
     message: input.message,
     cake_size: input.cakeSize,
     cake_shape: input.cakeShape,
-    image_mime_type: null,
-    image_filename: null,
-    image_generated_at: null,
-    has_image_blob: false,
+    image_mime_type: input.imageMimeType ?? null,
+    image_filename: input.imageFilename ?? null,
+    image_generated_at: input.imageGeneratedAt ?? null,
+    has_image_blob: input.imageBlob !== undefined && input.imageBlob.byteLength > 0,
     created_at: input.createdAt,
     updated_at: input.createdAt,
   } satisfies CakeRecord
@@ -94,6 +165,26 @@ export async function getCakeById(db: D1DatabaseLike, cakeId: string) {
   return row ? cakeRecordFromRow(row) : null
 }
 
+export async function getCakeImageById(db: D1DatabaseLike, cakeId: string): Promise<CakeImageRecord | null> {
+  const row = await db
+    .prepare(`
+      SELECT "image_blob", "image_mime_type", "image_filename", "image_generated_at"
+      FROM "cakes"
+      WHERE "cake_id" = ?
+    `)
+    .bind(cakeId)
+    .first<CakeImageRow>()
+
+  if (!row?.image_blob) return null
+
+  return {
+    image_blob: normalizeImageBlob(row.image_blob),
+    image_mime_type: row.image_mime_type ?? 'image/png',
+    image_filename: row.image_filename,
+    image_generated_at: row.image_generated_at,
+  }
+}
+
 export async function updateCakeMessage(
   db: D1DatabaseLike,
   input: {
@@ -101,16 +192,38 @@ export async function updateCakeMessage(
     message: string
     cakeSize: CakeSize
     cakeShape: CakeShape
+    imageBlob: ArrayBuffer
+    imageMimeType: string
+    imageFilename: string
+    imageGeneratedAt: string
     updatedAt: string
   },
 ) {
   const result = await db
     .prepare(`
       UPDATE "cakes"
-      SET "message" = ?, "cake_size" = ?, "cake_shape" = ?, "updated_at" = ?
+      SET
+        "message" = ?,
+        "cake_size" = ?,
+        "cake_shape" = ?,
+        "image_blob" = ?,
+        "image_mime_type" = ?,
+        "image_filename" = ?,
+        "image_generated_at" = ?,
+        "updated_at" = ?
       WHERE "cake_id" = ?
     `)
-    .bind(input.message, input.cakeSize, input.cakeShape, input.updatedAt, input.cakeId)
+    .bind(
+      input.message,
+      input.cakeSize,
+      input.cakeShape,
+      input.imageBlob,
+      input.imageMimeType,
+      input.imageFilename,
+      input.imageGeneratedAt,
+      input.updatedAt,
+      input.cakeId,
+    )
     .run()
 
   if (result.success === false) throw new Error(result.error ?? 'Failed to update cake.')
