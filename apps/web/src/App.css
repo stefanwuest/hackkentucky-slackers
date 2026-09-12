@@ -353,7 +353,6 @@ button {
   padding: 12px 14px;
   color: #172033;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.05);
   text-decoration: none;
 }
 
@@ -699,7 +698,6 @@ tr:hover .sticky-action-column {
 
 .cake-sidebar {
   position: sticky;
-  top: 16px;
   max-height: 100%;
   align-self: start;
   overflow: auto;
@@ -710,7 +708,6 @@ tr:hover .sticky-action-column {
   border: 1px solid rgba(59, 18, 48, 0.1);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 50px rgba(59, 18, 48, 0.08);
 }
 
 .cake-sidebar-card {
@@ -1167,7 +1164,6 @@ tr:hover .sticky-action-column {
   height: 12px;
   border-radius: 999px;
   background: var(--cake-accent);
-  box-shadow: 0 4px 10px rgba(59, 18, 48, 0.12);
 }
 
 .cake-sprinkles span:nth-child(1) { top: 64px; left: 14%; transform: rotate(18deg); }
@@ -1196,7 +1192,6 @@ tr:hover .sticky-action-column {
   padding: 32px;
   color: #3b1230;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 50px rgba(59, 18, 48, 0.08);
   font-size: clamp(1.55rem, 3.5vw, 3.6rem);
   text-decoration: none;
   font-weight: 600;
@@ -1207,7 +1202,6 @@ tr:hover .sticky-action-column {
   border: 0;
   color: #ffffff;
   background: linear-gradient(135deg, #ec4899, #f97316);
-  box-shadow: 0 26px 70px rgba(236, 72, 153, 0.26);
 }
 
 .cake-action-button:hover {
