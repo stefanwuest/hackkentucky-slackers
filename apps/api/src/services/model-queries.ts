@@ -25,6 +25,12 @@ type CakeMessageResponse = {
   message: string
 }
 
+export type CakeMessageRequest = {
+  prospectInformation: string
+  minCharacters?: number
+  maxCharacters?: number
+}
+
 export type ModelQueryServiceOptions = {
   apiKey: string
   appTitle?: string
@@ -46,7 +52,7 @@ export type SingleTurnJsonQueryOptions<TResponse> = {
 
 export type ModelQueryService = {
   singleTurnJsonQuery: <TResponse>(options: SingleTurnJsonQueryOptions<TResponse>) => Promise<TResponse>
-  createCakeMessage: (occasion: string) => Promise<string>
+  createCakeMessage: (request: CakeMessageRequest) => Promise<string>
 }
 
 export function createModelQueryService(options: ModelQueryServiceOptions): ModelQueryService {
@@ -98,13 +104,27 @@ export function createModelQueryService(options: ModelQueryServiceOptions): Mode
     return parseResponse ? parseResponse(parsed) : (parsed as TResponse)
   }
 
-  async function createCakeMessage(occasion: string) {
+  async function createCakeMessage({ prospectInformation, minCharacters = 35, maxCharacters = 90 }: CakeMessageRequest) {
     const response = await singleTurnJsonQuery<CakeMessageResponse>({
       schemaName: 'cake_message',
-      schemaDescription: 'A short celebratory message suitable for writing on a cake.',
+      schemaDescription: 'A short, witty message suitable for writing on a prospecting cake.',
       schema: CAKE_MESSAGE_SCHEMA,
-      systemPrompt: 'You write concise, warm cake messages. Return only data matching the supplied JSON schema.',
-      userPrompt: `Write a cake message for this occasion: ${occasion}`,
+      systemPrompt: `You are helping an insurance broker get a foot in the door with a “cold cake” — an unsolicited cake sent to a prospective client.
+
+Your task is to write a witty, memorable message to be written on the cake. The message should spark curiosity, feel relevant to the prospect, and make them more likely to take a short follow-up call.
+
+Requirements:
+- The message must be between ${minCharacters} and ${maxCharacters} characters.
+- Keep it short enough to fit naturally on a cake.
+- Be clever, warm, and professional.
+- Avoid sounding pushy, creepy, overly salesy, or generic.
+- Do not mention that you are an AI.
+- Do not include quotation marks around the message.
+- Return only JSON matching the provided schema.`,
+      userPrompt: `Write the cake message using the prospect information below.
+
+Prospect information:
+${prospectInformation}`,
       maxTokens: 80,
       temperature: 0.7,
       parseResponse: parseCakeMessageResponse,
