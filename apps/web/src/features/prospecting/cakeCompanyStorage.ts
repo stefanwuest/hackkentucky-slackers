@@ -28,18 +28,25 @@ export function storeCakeCompany(company: Company) {
   const serializedCompany = JSON.stringify(company)
   window.sessionStorage.setItem(SELECTED_COMPANY_KEY, serializedCompany)
   window.sessionStorage.setItem(companyKey(company.company_id), serializedCompany)
+  if (company.sponsor_ein) window.sessionStorage.setItem(companyKey(company.sponsor_ein), serializedCompany)
 }
 
-export function readCakeCompany(companyId?: string) {
+export function readCakeCompany(companyKeyValue?: string) {
   if (!canUseSessionStorage()) return null
 
-  if (companyId) {
-    const matchingCompany = safeParseCompany(window.sessionStorage.getItem(companyKey(companyId)))
+  if (companyKeyValue) {
+    const matchingCompany = safeParseCompany(window.sessionStorage.getItem(companyKey(companyKeyValue)))
     if (matchingCompany) return matchingCompany
   }
 
   const selectedCompany = safeParseCompany(window.sessionStorage.getItem(SELECTED_COMPANY_KEY))
-  if (!companyId || selectedCompany?.company_id === companyId) return selectedCompany
+  if (
+    !companyKeyValue ||
+    selectedCompany?.company_id === companyKeyValue ||
+    selectedCompany?.sponsor_ein === companyKeyValue
+  ) {
+    return selectedCompany
+  }
 
   return null
 }

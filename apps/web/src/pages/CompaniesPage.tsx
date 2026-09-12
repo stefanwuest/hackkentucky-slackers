@@ -224,12 +224,14 @@ export function CompaniesPage() {
           <button
             className="cake-it-button"
             type="button"
+            disabled={!row.original.sponsor_ein}
             onClick={() => {
+              if (!row.original.sponsor_ein) return
               storeCakeCompany(row.original)
-              navigate(`/companies/${encodeURIComponent(row.original.company_id)}`, { state: { company: row.original } })
+              navigate(`/companies/${encodeURIComponent(row.original.sponsor_ein)}`, { state: { company: row.original } })
             }}
           >
-            Cake it
+            {row.original.sponsor_ein ? 'Cake it' : 'No EIN'}
           </button>
         ),
       },

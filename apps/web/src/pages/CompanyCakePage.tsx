@@ -1,9 +1,11 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
+import useSWR from 'swr'
 
 import { createCakeConcept } from '../features/prospecting/cakeConcept'
 import { readCakeCompany, storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
-import { type Company } from '../features/prospecting/types'
+import { type Company, type CompanyResponse } from '../features/prospecting/types'
+import { api } from '../lib/api'
 
 type CompanyCakeRouteState = {
   company?: Company
@@ -22,6 +24,11 @@ function decodeRouteId(value: string | undefined) {
   } catch {
     return value
   }
+}
+
+async function fetchCompanyByEin([, companyEin]: readonly ['company', string]) {
+  const payload = await api.get<CompanyResponse>(`/api/company/${encodeURIComponent(companyEin)}`)
+  return payload.company
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -49,18 +56,28 @@ function CopyButton({ value, label = 'Copy prompt' }: CopyButtonProps) {
   )
 }
 
-function MissingCompanyFallback() {
+function MissingCompanyFallback({ message }: { message?: string }) {
   return (
     <section className="cake-fallback-card">
       <span className="cake-eyebrow">No crumbs found</span>
       <h1>Pick a prospect to cake first.</h1>
       <p>
-        The cake detail page needs a selected company from the prospect table. Head back to the homepage and use the
-        Cake it action on any row.
+        {message ??
+          'The cake detail page needs a company EIN from the prospect table. Head back to the homepage and use the Cake it action on any row.'}
       </p>
       <Link className="cake-primary-link" to="/">
         Back to Cake my prospect
       </Link>
+    </section>
+  )
+}
+
+function LoadingCompanyFallback() {
+  return (
+    <section className="cake-fallback-card">
+      <span className="cake-eyebrow">Mixing batter</span>
+      <h1>Loading company details…</h1>
+      <p>Fetching the latest company data for this EIN.</p>
     </section>
   )
 }
@@ -78,15 +95,27 @@ function PromptCard({ title, prompt }: { title: string; prompt: string }) {
 }
 
 export function CompanyCakePage() {
-  const { companyId: routeCompanyId } = useParams()
-  const companyId = decodeRouteId(routeCompanyId)
+  const { companyEin: routeCompanyEin } = useParams()
+  const companyEin = decodeRouteId(routeCompanyEin)
   const location = useLocation()
   const routedCompany = (location.state as CompanyCakeRouteState | null)?.company
 
-  const company = useMemo(() => {
-    if (routedCompany?.company_id === companyId) return routedCompany
-    return readCakeCompany(companyId)
-  }, [companyId, routedCompany])
+  const cachedCompany = useMemo(() => {
+    if (routedCompany?.sponsor_ein === companyEin) return routedCompany
+    return readCakeCompany(companyEin)
+  }, [companyEin, routedCompany])
+
+  const {
+    data: fetchedCompany,
+    error,
+    isLoading,
+  } = useSWR<Company, Error, readonly ['company', string] | null>(
+    companyEin ? ['company', companyEin] : null,
+    fetchCompanyByEin,
+    { fallbackData: cachedCompany ?? undefined },
+  )
+
+  const company = fetchedCompany ?? cachedCompany
 
   useEffect(() => {
     if (company) storeCakeCompany(company)
@@ -94,6 +123,8 @@ export function CompanyCakePage() {
 
   const concept = useMemo(() => (company ? createCakeConcept(company) : null), [company])
 
+  if (!company && isLoading) return <LoadingCompanyFallback />
+  if (!company && error) return <MissingCompanyFallback message={error.message} />
   if (!company || !concept) return <MissingCompanyFallback />
 
   return (

@@ -135,3 +135,8 @@ export type CompanyRenewalSignalRow = {
   premium_received: string | number | null
   contract_total_earned_premium: string | number | null
 }
+
+export type CompanyDetailRow = Omit<CompanyRenewalSignalRow, 'contract_id' | 'plan_id'> & {
+  contract_id: string | null
+  plan_id: string | null
+}

@@ -9,7 +9,7 @@ export default function App() {
     <main className="app-shell">
       <Routes>
         <Route path="/" element={<CompaniesPage />} />
-        <Route path="/companies/:companyId" element={<CompanyCakePage />} />
+        <Route path="/companies/:companyEin" element={<CompanyCakePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </main>

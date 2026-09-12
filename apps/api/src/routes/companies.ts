@@ -1,13 +1,235 @@
 import type { Hono } from 'hono'
 import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type CompanySignalType } from '../constants'
-import { bindAndQueryCompanyRenewalSignalRows } from '../db/renewals'
-import type { AppBindings } from '../types'
+import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
+import type { AppBindings, CompanyDetailRow } from '../types'
 import { coverageTypeFromDbValue, parseCoverageTypes } from '../utils/coverage'
 import { estimatedRenewalDate, toIsoDate, todayUtc } from '../utils/dates'
 import { matchesDaysToRenewalFilters, parseCompanySignalTypes, parseDaysToRenewalFilters, parseLimit } from '../utils/filters'
 import { toNumberOrNull } from '../utils/numbers'
 
+type CompanyResponse = {
+  company_id: string
+  name: string | null
+  dba_name: string | null
+  sponsor_ein: string | null
+  location: {
+    city: string | null
+    state: string | null
+    zip: string | null
+  }
+  business_code: string | null
+  metrics: {
+    filing_count: number | null
+    plan_count: number | null
+    contract_count: number | null
+    carrier_count: number | null
+    contract_number_count: number | null
+    policy_end_month_count: number | null
+    total_covered_lives_eoy: number | null
+    total_premium_received: number | null
+    total_earned_premium: number | null
+    latest_date_received: string | null
+  }
+  signals: Array<{
+    type: CompanySignalType
+    severity: 'low' | 'medium' | 'high'
+    label: string
+    properties: {
+      earliest_estimated_renewal_date: string
+      minimum_days_until_renewal: number
+      renewal_contract_count: number
+      coverage_types: string[]
+    }
+    evidence: Array<{
+      contract_id: string
+      plan_id: string
+      plan_name: string | null
+      carrier: {
+        name: string | null
+        ein: string | null
+        naic_code: string | null
+        contract_number: string | null
+      }
+      coverage_types: string[]
+      covered_lives_eoy: number | null
+      policy_from_date: string | null
+      policy_to_date: string | null
+      estimated_renewal_date: string
+      days_until_renewal: number
+      premium_received_amount: number | null
+      total_earned_premium_amount: number | null
+    }>
+  }>
+}
+
+function companyFromRows(rows: CompanyDetailRow[], today: Date): CompanyResponse | null {
+  const firstRow = rows[0]
+  if (!firstRow) return null
+
+  const company: CompanyResponse = {
+    company_id: firstRow.company_id,
+    name: firstRow.display_name,
+    dba_name: firstRow.dba_name,
+    sponsor_ein: firstRow.sponsor_ein,
+    location: {
+      city: firstRow.mail_city,
+      state: firstRow.mail_state,
+      zip: firstRow.mail_zip,
+    },
+    business_code: firstRow.business_code,
+    metrics: {
+      filing_count: toNumberOrNull(firstRow.filing_count),
+      plan_count: toNumberOrNull(firstRow.plan_count),
+      contract_count: toNumberOrNull(firstRow.contract_count),
+      carrier_count: toNumberOrNull(firstRow.carrier_count),
+      contract_number_count: toNumberOrNull(firstRow.contract_number_count),
+      policy_end_month_count: toNumberOrNull(firstRow.policy_end_month_count),
+      total_covered_lives_eoy: toNumberOrNull(firstRow.total_covered_lives_eoy),
+      total_premium_received: toNumberOrNull(firstRow.total_premium_received),
+      total_earned_premium: toNumberOrNull(firstRow.total_earned_premium),
+      latest_date_received: firstRow.latest_date_received,
+    },
+    signals: [],
+  }
+
+  let minimumDaysUntilRenewal = Number.MAX_SAFE_INTEGER
+  let earliestEstimatedRenewalDate = ''
+  const coverageTypes = new Set<string>()
+  const evidenceByContract = new Map<
+    string,
+    {
+      evidence: CompanyResponse['signals'][number]['evidence'][number]
+      coverageTypes: Set<string>
+    }
+  >()
+
+  for (const row of rows) {
+    if (!row.contract_id || !row.plan_id) continue
+
+    const renewalDate = estimatedRenewalDate(row.policy_to_date, today)
+    if (!renewalDate) continue
+
+    const daysUntilRenewal = Math.ceil((renewalDate.getTime() - today.getTime()) / MS_PER_DAY)
+    const estimatedRenewalDateIso = toIsoDate(renewalDate)
+
+    if (daysUntilRenewal < minimumDaysUntilRenewal) {
+      minimumDaysUntilRenewal = daysUntilRenewal
+      earliestEstimatedRenewalDate = estimatedRenewalDateIso
+    }
+
+    const coverageType = coverageTypeFromDbValue(row.coverage_type)
+    if (coverageType) coverageTypes.add(coverageType)
+
+    let evidenceGroup = evidenceByContract.get(row.contract_id)
+    if (!evidenceGroup) {
+      evidenceGroup = {
+        evidence: {
+          contract_id: row.contract_id,
+          plan_id: row.plan_id,
+          plan_name: row.plan_name,
+          carrier: {
+            name: row.carrier_name,
+            ein: row.carrier_ein,
+            naic_code: row.carrier_naic_code,
+            contract_number: row.contract_number,
+          },
+          coverage_types: [],
+          covered_lives_eoy: toNumberOrNull(row.covered_lives_eoy),
+          policy_from_date: row.policy_from_date,
+          policy_to_date: row.policy_to_date,
+          estimated_renewal_date: estimatedRenewalDateIso,
+          days_until_renewal: daysUntilRenewal,
+          premium_received_amount: toNumberOrNull(row.premium_received),
+          total_earned_premium_amount: toNumberOrNull(row.contract_total_earned_premium),
+        },
+        coverageTypes: new Set<string>(),
+      }
+      evidenceByContract.set(row.contract_id, evidenceGroup)
+    }
+
+    if (coverageType) evidenceGroup.coverageTypes.add(coverageType)
+  }
+
+  const evidence = [...evidenceByContract.values()]
+    .map((evidenceGroup) => ({
+      ...evidenceGroup.evidence,
+      coverage_types: [...evidenceGroup.coverageTypes].sort(),
+    }))
+    .sort((a, b) => {
+      const daysDiff = a.days_until_renewal - b.days_until_renewal
+      if (daysDiff !== 0) return daysDiff
+      return (a.carrier.name ?? '').localeCompare(b.carrier.name ?? '')
+    })
+
+  if (evidence.length > 0) {
+    company.signals.push({
+      type: 'upcoming_renewal',
+      severity: minimumDaysUntilRenewal <= 30 ? 'high' : minimumDaysUntilRenewal <= 90 ? 'medium' : 'low',
+      label: `Renewal likely in ${minimumDaysUntilRenewal} days`,
+      properties: {
+        earliest_estimated_renewal_date: earliestEstimatedRenewalDate,
+        minimum_days_until_renewal: minimumDaysUntilRenewal,
+        renewal_contract_count: evidence.length,
+        coverage_types: [...coverageTypes].sort(),
+      },
+      evidence,
+    })
+  }
+
+  return company
+}
+
+function normalizeSponsorEin(value: string | undefined) {
+  const sponsorEin = value?.trim().replace(/\D/g, '') ?? ''
+  return sponsorEin || null
+}
+
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
+  app.get('/api/company/:sponsorEin', async (c) => {
+    const sponsorEin = normalizeSponsorEin(c.req.param('sponsorEin'))
+    if (!sponsorEin) return c.json({ error: 'sponsor_ein is required.' }, 400)
+
+    const db = c.env.DB ?? c.env.MY_DB
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    const queryResult = await bindAndQueryCompanyRowsByEin(db, sponsorEin)
+    if (queryResult.success === false) {
+      return c.json({ error: queryResult.error ?? 'Failed to query company.' }, 500)
+    }
+
+    const rows = queryResult.results ?? []
+    const today = todayUtc()
+    const company = companyFromRows(rows, today)
+    if (!company) return c.json({ error: 'Company not found.' }, 404)
+
+    return c.json({
+      metadata: {
+        as_of_date: toIsoDate(today),
+        included_sidebar_fields: [
+          'name',
+          'dba_name',
+          'sponsor_ein',
+          'location',
+          'renewal_signal',
+          'estimated_renewal_date',
+          'days_until_renewal',
+          'coverage_types',
+          'covered_lives_eoy',
+          'total_earned_premium',
+          'carriers',
+        ],
+      },
+      company,
+    })
+  })
+
   app.get('/api/companies', async (c) => {
     const url = new URL(c.req.url)
     const state = url.searchParams.get('state')?.trim().toUpperCase()

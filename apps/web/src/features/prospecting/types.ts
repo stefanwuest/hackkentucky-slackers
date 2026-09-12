@@ -112,3 +112,8 @@ export type CompaniesResponse = {
   companies: Company[]
   error?: string
 }
+
+export type CompanyResponse = {
+  company: Company
+  error?: string
+}

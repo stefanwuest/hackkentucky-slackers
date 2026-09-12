@@ -1,5 +1,5 @@
 import { COVERAGE_TYPE_BY_VALUE, type CoverageType } from '../constants'
-import type { CompanyRenewalSignalRow, D1DatabaseLike, RenewalRow } from '../types'
+import type { CompanyDetailRow, CompanyRenewalSignalRow, D1DatabaseLike, RenewalRow } from '../types'
 import { dbCoverageValuesForCoverageTypes } from '../utils/coverage'
 
 function quoteIdentifier(identifier: string) {
@@ -59,6 +59,52 @@ export function bindAndQueryRenewalRows(db: D1DatabaseLike, state: string, cover
   `
 
   return db.prepare(sql).bind(state).all<RenewalRow>()
+}
+
+export function bindAndQueryCompanyRowsByEin(db: D1DatabaseLike, sponsorEin: string) {
+  const sql = `
+    SELECT
+      c."company_id",
+      c."sponsor_ein",
+      c."display_name",
+      c."dba_name",
+      c."mail_city",
+      c."mail_state",
+      c."mail_zip",
+      c."business_code",
+      c."filing_count",
+      c."plan_count",
+      c."latest_date_received",
+      ccs."contract_count",
+      ccs."carrier_count",
+      ccs."contract_number_count",
+      ccs."policy_end_month_count",
+      ccs."total_covered_lives_eoy",
+      ccs."total_premium_received",
+      ccs."total_earned_premium",
+      ic."contract_id",
+      ic."plan_id",
+      p."plan_name",
+      ic."carrier_name",
+      ic."carrier_ein",
+      ic."carrier_naic_code",
+      ic."contract_number",
+      cct."coverage_type",
+      ic."covered_lives_eoy",
+      ic."policy_from_date",
+      ic."policy_to_date",
+      ic."premium_received",
+      ic."total_earned_premium" AS "contract_total_earned_premium"
+    FROM "companies" c
+    LEFT JOIN "company_contract_summary" ccs ON ccs."company_id" = c."company_id"
+    LEFT JOIN "insurance_contracts" ic ON ic."company_id" = c."company_id"
+    LEFT JOIN "plans" p ON p."plan_id" = ic."plan_id"
+    LEFT JOIN "contract_coverage_types" cct ON cct."contract_id" = ic."contract_id"
+    WHERE c."sponsor_ein" = ?
+    ORDER BY ic."policy_to_date" ASC, ic."carrier_name" ASC, ic."contract_id" ASC
+  `
+
+  return db.prepare(sql).bind(sponsorEin).all<CompanyDetailRow>()
 }
 
 export function bindAndQueryCompanyRenewalSignalRows(db: D1DatabaseLike, state: string, coverageTypes: CoverageType[]) {
