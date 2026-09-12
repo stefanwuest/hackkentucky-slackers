@@ -17,11 +17,7 @@ export function CakeHeader({ showHomeLink = false }: { showHomeLink?: boolean })
             </svg>
           </Link>
         ) : null}
-        <h1>
-          <img className="cake-home-logo" src={cakeMyProspectLogo} alt="Cake my prospect" />
-        </h1>
       </div>
-      <p>Find renewal signals, then turn a prospect into a cake-worthy conversation starter.</p>
     </header>
   )
 }
