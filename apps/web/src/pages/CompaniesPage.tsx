@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
+import { useNavigate } from 'react-router-dom'
 
 import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel } from '../components/ui/sidebar'
+import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
 import { API_BASE_URL, stateOptions } from '../features/prospecting/constants'
 import { formatCoverageType, formatCurrency, formatNumber } from '../features/prospecting/formatters'
 import {
@@ -99,6 +101,7 @@ async function fetchSignalCompanies(signal: ProspectSignalDefinition, state: str
 }
 
 export function CompaniesPage() {
+  const navigate = useNavigate()
   const [selectedState, setSelectedState] = useState(DEFAULT_COMPANY_STATE)
   const [selectedSignalIds, setSelectedSignalIds] = useState<ProspectSignalId[]>(defaultSelectedProspectSignalIds)
   const [tableSearch, setTableSearch] = useState('')
@@ -188,8 +191,25 @@ export function CompaniesPage() {
           </div>
         ),
       },
+      {
+        id: 'cake_action',
+        header: 'Cake',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <button
+            className="cake-it-button"
+            type="button"
+            onClick={() => {
+              storeCakeCompany(row.original)
+              navigate(`/companies/${encodeURIComponent(row.original.company_id)}`, { state: { company: row.original } })
+            }}
+          >
+            Cake it
+          </button>
+        ),
+      },
     ],
-    [],
+    [navigate],
   )
 
   useEffect(() => {
@@ -244,8 +264,10 @@ export function CompaniesPage() {
 
   return (
     <>
-      <header className="page-header">
-        <h1>Discover prospects</h1>
+      <header className="page-header cake-home-header">
+        <span className="cake-eyebrow">Hackathon MVP</span>
+        <h1>Cake my prospect</h1>
+        <p>Find renewal signals, then turn a prospect into a cake-worthy conversation starter.</p>
       </header>
 
       <div className="faceted-page">

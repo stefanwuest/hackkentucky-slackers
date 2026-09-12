@@ -1,0 +1,214 @@
+import { formatCoverageType, formatCurrency, formatList, formatNumber } from './formatters'
+import { type Company, type CompanySignal } from './types'
+
+export type CakeConcept = {
+  companyName: string
+  initials: string
+  hookMessage: string
+  designPrompt: string
+  mockupPrompt: string
+  palette: {
+    primary: string
+    secondary: string
+    accent: string
+    frosting: string
+    ink: string
+  }
+  printableSvg: string
+  printableSvgDataUrl: string
+  primarySignal: CompanySignal | null
+  summary: {
+    dbaOrEin: string
+    location: string
+    signalLabel: string
+    estimatedRenewalDate: string
+    daysUntilRenewal: string
+    coverageTypes: string
+    coveredLives: string
+    totalEarnedPremium: string
+    carrierNames: string
+  }
+}
+
+type CakePalette = CakeConcept['palette']
+
+const cakePalettes: CakePalette[] = [
+  { primary: '#ff4f8b', secondary: '#ffd6e6', accent: '#7c3aed', frosting: '#fff7fb', ink: '#3b1230' },
+  { primary: '#f97316', secondary: '#ffedd5', accent: '#0ea5e9', frosting: '#fff8ed', ink: '#431407' },
+  { primary: '#10b981', secondary: '#d1fae5', accent: '#f43f5e', frosting: '#f0fdf4', ink: '#052e16' },
+  { primary: '#6366f1', secondary: '#e0e7ff', accent: '#f59e0b', frosting: '#f8fafc', ink: '#1e1b4b' },
+  { primary: '#ec4899', secondary: '#fce7f3', accent: '#14b8a6', frosting: '#fff1f7', ink: '#500724' },
+]
+
+function hashString(value: string) {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+function xmlEscape(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+function dataUrl(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+function shorten(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 1).trim()}…`
+}
+
+export function selectPrimarySignal(company: Company) {
+  return [...company.signals].sort((a, b) => a.properties.minimum_days_until_renewal - b.properties.minimum_days_until_renewal)[0] ?? null
+}
+
+export function getCompanyDisplayName(company: Company) {
+  return company.name?.trim() || company.dba_name?.trim() || 'Unnamed prospect'
+}
+
+export function getCompanyInitials(name: string) {
+  const words = name
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (words.length === 0) return 'CP'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase()
+}
+
+export function getCakePalette(companyName: string) {
+  return cakePalettes[hashString(companyName) % cakePalettes.length]
+}
+
+export function getCarrierNames(signal: CompanySignal | null) {
+  const carriers = signal?.evidence.map((item) => item.carrier.name).filter((name): name is string => Boolean(name?.trim())) ?? []
+  return [...new Set(carriers)]
+}
+
+export function formatCompanyLocation(company: Company) {
+  const cityState = [company.location.city, company.location.state].filter(Boolean).join(', ')
+  return [cityState, company.location.zip].filter(Boolean).join(' ') || 'Location not reported'
+}
+
+export function generateCakeHook(company: Company) {
+  const signal = selectPrimarySignal(company)
+  const companyName = getCompanyDisplayName(company)
+  const coverage = signal?.properties.coverage_types[0]
+  const coverageLabel = coverage ? formatCoverageType(coverage).toLowerCase() : 'benefits'
+  const days = signal?.properties.minimum_days_until_renewal
+
+  if (typeof days === 'number' && days <= 30) {
+    return `${companyName} has a renewal coming fast — bring a ${coverageLabel} cake hook before the conversation gets stale.`
+  }
+
+  if (typeof days === 'number') {
+    return `Sweeten the next ${coverageLabel} renewal conversation with a cake-worthy opener ${days} days before renewal.`
+  }
+
+  return `Turn ${companyName} into a memorable cake-worthy conversation starter.`
+}
+
+export function createCakePrompts(company: Company, hookMessage: string) {
+  const companyName = getCompanyDisplayName(company)
+  const signal = selectPrimarySignal(company)
+  const coverageTypes = signal?.properties.coverage_types.map(formatCoverageType).join(', ') || 'employee benefits'
+  const renewalTiming = signal
+    ? `${signal.properties.minimum_days_until_renewal} days until estimated renewal on ${signal.properties.earliest_estimated_renewal_date}`
+    : 'upcoming renewal timing'
+
+  return {
+    designPrompt: `Create a clean printable square cake topper design for ${companyName}. Include the company name or initials, ${renewalTiming}, ${coverageTypes}, and the message: "${hookMessage}". Make it playful, professional, high contrast, bakery-ready, no photorealistic cake, flat vector design, centered composition.`,
+    mockupPrompt: `Create a polished hackathon demo mockup of a frosted celebration cake for prospect outreach. Place the ${companyName} cake topper design on top of the cake, include subtle renewal-themed decorations, keep text legible, cheerful sales-meets-bakery mood, premium but fun. Use this hook: "${hookMessage}"`,
+  }
+}
+
+export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>) {
+  const palette = concept.palette
+  const companyName = xmlEscape(shorten(concept.companyName, 34))
+  const initials = xmlEscape(concept.initials)
+  const hookText = shorten(concept.hookMessage, 74)
+  const hookLineOne = xmlEscape(hookText.slice(0, 38))
+  const hookLineTwo = xmlEscape(hookText.slice(38))
+  const days = xmlEscape(concept.summary.daysUntilRenewal)
+  const renewal = xmlEscape(concept.summary.estimatedRenewalDate)
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable cake design for ${companyName}">
+  <defs>
+    <radialGradient id="frosting" cx="50%" cy="45%" r="58%">
+      <stop offset="0%" stop-color="${palette.frosting}"/>
+      <stop offset="62%" stop-color="${palette.secondary}"/>
+      <stop offset="100%" stop-color="${palette.primary}"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <rect width="900" height="900" rx="92" fill="${palette.secondary}"/>
+  <circle cx="450" cy="450" r="374" fill="url(#frosting)" filter="url(#shadow)"/>
+  <circle cx="450" cy="450" r="322" fill="none" stroke="#ffffff" stroke-width="18" stroke-dasharray="12 24" opacity="0.95"/>
+  <circle cx="450" cy="286" r="96" fill="#ffffff" opacity="0.92"/>
+  <text x="450" y="314" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="70" font-weight="900" fill="${palette.primary}">${initials}</text>
+  <text x="450" y="430" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900" fill="${palette.ink}">${companyName}</text>
+  <rect x="230" y="466" width="440" height="78" rx="39" fill="#ffffff" opacity="0.9"/>
+  <text x="450" y="517" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" fill="${palette.accent}">${days}</text>
+  <text x="450" y="584" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" fill="${palette.ink}">Estimated renewal: ${renewal}</text>
+  <text x="450" y="656" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="800" fill="${palette.ink}">
+    <tspan x="450" dy="0">${hookLineOne}</tspan>
+    <tspan x="450" dy="38">${hookLineTwo}</tspan>
+  </text>
+  <path d="M178 215 C230 166 285 166 338 215" fill="none" stroke="${palette.accent}" stroke-width="18" stroke-linecap="round"/>
+  <path d="M562 215 C615 166 670 166 722 215" fill="none" stroke="${palette.accent}" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="228" cy="718" r="16" fill="${palette.accent}"/>
+  <circle cx="672" cy="718" r="16" fill="${palette.accent}"/>
+  <text x="450" y="775" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="900" fill="${palette.ink}" letter-spacing="3">CAKE MY PROSPECT</text>
+</svg>`
+}
+
+export function createCakeConcept(company: Company): CakeConcept {
+  const companyName = getCompanyDisplayName(company)
+  const primarySignal = selectPrimarySignal(company)
+  const hookMessage = generateCakeHook(company)
+  const palette = getCakePalette(companyName)
+  const carrierNames = getCarrierNames(primarySignal)
+  const coverageTypes = primarySignal?.properties.coverage_types.map(formatCoverageType) ?? []
+  const { designPrompt, mockupPrompt } = createCakePrompts(company, hookMessage)
+
+  const conceptWithoutSvg = {
+    companyName,
+    initials: getCompanyInitials(companyName),
+    hookMessage,
+    designPrompt,
+    mockupPrompt,
+    palette,
+    primarySignal,
+    summary: {
+      dbaOrEin: company.dba_name ? `DBA ${company.dba_name}` : company.sponsor_ein ? `EIN ${company.sponsor_ein}` : 'DBA / EIN not reported',
+      location: formatCompanyLocation(company),
+      signalLabel: primarySignal?.label ?? 'No renewal signal selected',
+      estimatedRenewalDate: primarySignal?.properties.earliest_estimated_renewal_date ?? 'Not reported',
+      daysUntilRenewal: primarySignal ? `${primarySignal.properties.minimum_days_until_renewal} days` : 'Not reported',
+      coverageTypes: formatList(coverageTypes),
+      coveredLives: formatNumber(company.metrics.total_covered_lives_eoy),
+      totalEarnedPremium: formatCurrency(company.metrics.total_earned_premium),
+      carrierNames: formatList(carrierNames),
+    },
+  } satisfies Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>
+
+  const printableSvg = buildPrintableCakeSvg(conceptWithoutSvg)
+
+  return {
+    ...conceptWithoutSvg,
+    printableSvg,
+    printableSvgDataUrl: dataUrl(printableSvg),
+  }
+}
