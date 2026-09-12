@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import { CakeHeader } from '../components/CakeHeader'
@@ -8,6 +8,7 @@ import { Combobox } from '../components/ui/combobox'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Input } from '../components/ui/input'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel } from '../components/ui/sidebar'
+import { getBusinessCardProfile } from '../features/profile/profileStorage'
 import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
 import { stateOptions } from '../features/prospecting/constants'
 import { formatCoverageType, formatCurrency, formatNumber } from '../features/prospecting/formatters'
@@ -136,7 +137,9 @@ export function CompaniesPage() {
 
       try {
         storeCakeCompany(company)
-        const response = await api.post<CakeResponse>(`/api/company/${encodeURIComponent(sponsorEin)}/cakes`)
+        const response = await api.post<CakeResponse>(`/api/company/${encodeURIComponent(sponsorEin)}/cakes`, {
+          businessProfile: getBusinessCardProfile(),
+        })
         storeCakeCompany(response.company)
         navigate(`/cakes/${encodeURIComponent(response.cake.cake_id)}`, { state: response })
       } catch (error) {
@@ -270,9 +273,10 @@ export function CompaniesPage() {
   }
 
   const selectedSignalCount = selectedSignalIds.length
+  const businessCardProfile = getBusinessCardProfile()
 
   return (
-    <>
+    <div className="cake-home-page">
       <CakeHeader />
 
       <div className="faceted-page">
@@ -326,7 +330,7 @@ export function CompaniesPage() {
           ))}
         </SidebarContent>
 
-        <SidebarFooter>
+        <SidebarFooter className="signals-sidebar-footer">
           <button
             className="clear-filters-button"
             type="button"
@@ -335,6 +339,18 @@ export function CompaniesPage() {
           >
             Clear all filters
           </button>
+
+          {businessCardProfile ? (
+            <Link className="sidebar-profile-card" to="/profile" aria-label="Edit business card profile">
+              <div>
+                <strong>{businessCardProfile.name}</strong>
+                <p>{businessCardProfile.company}</p>
+              </div>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </Link>
+          ) : null}
         </SidebarFooter>
       </Sidebar>
 
@@ -347,6 +363,7 @@ export function CompaniesPage() {
             <div className="empty-state">Select at least one signal to find matching companies.</div>
           ) : companyData ? (
             <DataTable
+              className="companies-table"
               columns={companyColumns}
               data={companyData.companies}
               searchPlaceholder="Filter companies, locations, carriers, coverages..."
@@ -362,6 +379,6 @@ export function CompaniesPage() {
           </section>
         </div>
       </div>
-    </>
+    </div>
   )
 }

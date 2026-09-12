@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
 import { CakeHeader } from '../components/CakeHeader'
+import { getBusinessCardProfile } from '../features/profile/profileStorage'
 import { createCakeConcept } from '../features/prospecting/cakeConcept'
 import { storeCakeCompany } from '../features/prospecting/cakeCompanyStorage'
 import { type CakeResponse } from '../features/prospecting/types'
@@ -164,6 +165,7 @@ export function CompanyCakePage() {
       const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}/message`, {
         message,
         cakeColor: selectedCakeColor ?? concept?.palette.secondary,
+        businessProfile: getBusinessCardProfile(),
       })
       storeCakeCompany(updatedCakeResponse.company)
       setCakeTextDraft(updatedCakeResponse.cake.message)
@@ -184,7 +186,9 @@ export function CompanyCakePage() {
     setIsRegeneratingCakeMessage(true)
 
     try {
-      const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}`)
+      const updatedCakeResponse = await api.put<CakeResponse>(`/api/cakes/${encodeURIComponent(cakeId)}`, {
+        businessProfile: getBusinessCardProfile(),
+      })
       storeCakeCompany(updatedCakeResponse.company)
       setCakeTextDraft(updatedCakeResponse.cake.message)
       setIsEditingCakeText(false)
@@ -218,7 +222,7 @@ export function CompanyCakePage() {
 
   return (
     <div className="cake-page">
-      <CakeHeader />
+      <CakeHeader showHomeLink />
 
       <div className="cake-detail-layout">
         <aside className="cake-sidebar" aria-label="Company cake summary">

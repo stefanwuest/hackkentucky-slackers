@@ -67,14 +67,22 @@ export type CakeMessageResponse = {
   cake_shape: CakeShape
 }
 
+export type BusinessCardProfile = {
+  name: string
+  company: string
+  phoneNumber: string
+}
+
 export type CakeMessageRequest = {
   prospectInformation: string
+  businessCardProfile?: BusinessCardProfile
   minCharacters?: number
   maxCharacters?: number
 }
 
 export type CakeImageRequest = {
   cakeMessage: CakeMessageResponse
+  businessCardProfile?: BusinessCardProfile
   frostingColor?: string
   user?: string
 }
@@ -195,11 +203,12 @@ Requirements:
 - Recommend a cake_size from: ${CAKE_SIZES.join(', ')}.
 - Recommend a cake_shape from: ${CAKE_SHAPES.join(', ')}.
 - Be clever, warm, and professional.
+- Only write the witty prospect-facing cake message. Do not include sender business card details, sender names, sender companies, phone numbers, signatures, or contact information in the message.
 - Avoid sounding pushy, creepy, overly salesy, or generic.
 - Do not mention that you are an AI.
 - Do not include quotation marks around the message.
 - Return only JSON matching the provided schema.`,
-      userPrompt: `Write the cake message using the prospect information below.
+      userPrompt: `Write the cake message using only the prospect information below.
 
 Prospect information:
 ${prospectInformation}`,
@@ -211,9 +220,9 @@ ${prospectInformation}`,
     return response
   }
 
-  async function createCakeImage({ cakeMessage, frostingColor, user }: CakeImageRequest) {
+  async function createCakeImage({ cakeMessage, businessCardProfile, frostingColor, user }: CakeImageRequest) {
     const validatedCakeMessage = parseCakeMessageResponse(cakeMessage)
-    const prompt = createCakeImagePrompt(validatedCakeMessage, frostingColor)
+    const prompt = createCakeImagePrompt(validatedCakeMessage, frostingColor, businessCardProfile)
 
     const result = await openRouter.images.generate({
       imageGenerationRequest: {
@@ -304,22 +313,30 @@ function parseJsonObject(content: string) {
   }
 }
 
-function createCakeImagePrompt(cakeMessage: CakeMessageResponse, frostingColor?: string) {
+function formatBusinessCardProfile(profile: BusinessCardProfile) {
+  return `${profile.name} • ${profile.company} • ${profile.phoneNumber}`
+}
+
+function createCakeImagePrompt(cakeMessage: CakeMessageResponse, frostingColor?: string, businessCardProfile?: BusinessCardProfile) {
   const cakeSize = cakeMessage.cake_size.replace('_', ' ')
   const colorRequirement = frostingColor ? `\n- Use ${frostingColor} as the dominant glaze / frosting surface color.` : ''
+  const businessCardInformation = businessCardProfile ? formatBusinessCardProfile(businessCardProfile) : null
+  const businessCardRequirement = businessCardInformation
+    ? `\n- After the main inscription, add the sender business card information on the cake frosting itself, exactly as this smaller secondary line: ${JSON.stringify(businessCardInformation)}\n- Place the sender line below the main inscription or near the lower rim of the cake, in small but readable letters.\n- Keep the sender line clearly less prominent than the main cake inscription; the main inscription must remain the visual headline.\n- Do not put the sender business card information on a separate card, label, box, tag, or anything outside the cake.`
+    : ''
 
   return `Create a square, top-down bakery product mockup of a ${cakeSize} ${cakeMessage.cake_shape} frosted cake for a professional B2B prospecting gift.
 
-The cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
+The main cake inscription must be exactly: ${JSON.stringify(cakeMessage.message)}
 
 Requirements:
 - Center the cake in a 1:1 image.
-- Make the inscription highly legible, written with cake print on the cake surface.
-- The full cake should be covered in one color glaze with the print. No cream.${colorRequirement}
-- The cake should appear as an editable print with the text only.
+- Make the main cake inscription the most prominent, largest, and most legible text on the cake.
+- The full cake should be covered in one color glaze with printed lettering on the frosting. No cream.${colorRequirement}${businessCardRequirement}
 - Keep the design warm, clever, polished, and professional.
 - Use tasteful decorations that support an insurance renewal / business outreach theme.
-- Do not include any extra words, logos, watermarks, hands, people, packaging labels, or UI elements.`
+- Do not include any extra words beyond the exact main cake inscription and the provided sender business card information.
+- Do not include logos, watermarks, hands, people, packaging labels, or UI elements.`
 }
 
 function extractGeneratedImage(value: unknown) {

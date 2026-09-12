@@ -2,7 +2,7 @@ import type { Hono } from 'hono'
 import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type CompanySignalType } from '../constants'
 import { getCakeById, getCakeImageById, insertCake, updateCakeMessage } from '../db/cakes'
 import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
-import { createModelQueryServiceFromEnv } from '../services/model-queries'
+import { createModelQueryServiceFromEnv, type BusinessCardProfile } from '../services/model-queries'
 import type { AppBindings, CakeRecord, CompanyDetailRow, D1DatabaseLike } from '../types'
 import { coverageTypeFromDbValue, parseCoverageTypes } from '../utils/coverage'
 import { estimatedRenewalDate, toIsoDate, todayUtc } from '../utils/dates'
@@ -191,13 +191,23 @@ type GenerateCakeRequestBody = {
   maxCharacters?: unknown
   min_characters?: unknown
   max_characters?: unknown
+  businessProfile?: unknown
+  business_profile?: unknown
 }
+
+const BUSINESS_PROFILE_FIELD_LABELS = {
+  name: 'businessProfile.name',
+  company: 'businessProfile.company',
+  phoneNumber: 'businessProfile.phoneNumber',
+} as const
 
 type UpdateCakeTextRequestBody = {
   message?: unknown
   text?: unknown
   cakeColor?: unknown
   cake_color?: unknown
+  businessProfile?: unknown
+  business_profile?: unknown
 }
 
 const MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS = 110
@@ -205,6 +215,14 @@ const MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS = 110
 type IntegerParseResult =
   | {
       value: number | undefined
+    }
+  | {
+      error: string
+    }
+
+type StringParseResult =
+  | {
+      value: string
     }
   | {
       error: string
@@ -232,6 +250,38 @@ function parseOptionalPositiveInteger(body: unknown, camelCaseName: keyof Genera
   }
 
   return { value }
+}
+
+function normalizeRequiredString(value: unknown, label: string): StringParseResult {
+  if (typeof value !== 'string') return { error: `${label} must be a string.` }
+
+  const normalizedValue = value.trim().replace(/\s+/g, ' ')
+  if (!normalizedValue) return { error: `${label} must not be empty.` }
+
+  return { value: normalizedValue }
+}
+
+function parseBusinessCardProfile(body: unknown): BusinessCardProfile | { error: string } | undefined {
+  if (!isRecord(body)) return undefined
+
+  const value = body.businessProfile ?? body.business_profile ?? body.businessCardProfile ?? body.business_card_profile
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) return { error: 'businessProfile must be an object.' }
+
+  const nameResult = normalizeRequiredString(value.name, BUSINESS_PROFILE_FIELD_LABELS.name)
+  if ('error' in nameResult) return { error: nameResult.error }
+
+  const companyResult = normalizeRequiredString(value.company, BUSINESS_PROFILE_FIELD_LABELS.company)
+  if ('error' in companyResult) return { error: companyResult.error }
+
+  const phoneNumberResult = normalizeRequiredString(value.phoneNumber ?? value.phone_number ?? value.phone, BUSINESS_PROFILE_FIELD_LABELS.phoneNumber)
+  if ('error' in phoneNumberResult) return { error: phoneNumberResult.error }
+
+  return {
+    name: nameResult.value,
+    company: companyResult.value,
+    phoneNumber: phoneNumberResult.value,
+  }
 }
 
 function cakeProspectInformation(company: CompanyResponse) {
@@ -287,6 +337,7 @@ function createCakeImageFilename(cakeId: string, mediaType: string) {
 }
 
 type CakeMessageOptions = {
+  businessCardProfile?: BusinessCardProfile
   minCharacters?: number
   maxCharacters?: number
 }
@@ -313,18 +364,20 @@ async function generateCakeAssets(env: AppBindings, company: CompanyResponse, op
   const modelService = createModelQueryServiceFromEnv(env)
   const cakeMessage = await modelService.createCakeMessage({
     prospectInformation: cakeProspectInformation(company),
+    businessCardProfile: options.businessCardProfile,
     minCharacters: options.minCharacters,
     maxCharacters: options.maxCharacters,
   })
   const cakeImage = await modelService.createCakeImage({
     cakeMessage,
+    businessCardProfile: options.businessCardProfile,
     user: company.company_id ?? company.sponsor_ein ?? undefined,
   })
 
   return { cakeMessage, cakeImage }
 }
 
-async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, message: string, cakeColor?: string) {
+async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, message: string, cakeColor?: string, businessCardProfile?: BusinessCardProfile) {
   const modelService = createModelQueryServiceFromEnv(env)
   return modelService.createCakeImage({
     cakeMessage: {
@@ -332,6 +385,7 @@ async function generateCakeImageForText(env: AppBindings, cake: CakeRecord, mess
       cake_size: cake.cake_size,
       cake_shape: cake.cake_shape,
     },
+    businessCardProfile,
     frostingColor: cakeColor,
     user: cake.company_id ?? cake.sponsor_ein ?? undefined,
   })
@@ -357,6 +411,9 @@ function parseCakeMessageOptions(body: unknown): CakeMessageOptions | { error: s
   const maxCharactersResult = parseOptionalPositiveInteger(body, 'maxCharacters', 'max_characters')
   if ('error' in maxCharactersResult) return { error: maxCharactersResult.error }
 
+  const businessCardProfile = parseBusinessCardProfile(body)
+  if (businessCardProfile && 'error' in businessCardProfile) return { error: businessCardProfile.error }
+
   if (
     minCharactersResult.value !== undefined &&
     maxCharactersResult.value !== undefined &&
@@ -366,6 +423,7 @@ function parseCakeMessageOptions(body: unknown): CakeMessageOptions | { error: s
   }
 
   return {
+    businessCardProfile,
     minCharacters: minCharactersResult.value,
     maxCharacters: maxCharactersResult.value,
   }
@@ -375,7 +433,7 @@ function normalizeCakeText(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: string } | { error: string } {
+function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: string; businessCardProfile?: BusinessCardProfile } | { error: string } {
   if (!isRecord(body)) return { error: 'JSON body with message is required.' }
 
   const value = (body as UpdateCakeTextRequestBody).message ?? (body as UpdateCakeTextRequestBody).text
@@ -389,13 +447,16 @@ function parseCakeTextUpdate(body: unknown): { message: string; cakeColor?: stri
   const cakeColor = typeof cakeColorValue === 'string' && cakeColorValue.trim() ? cakeColorValue.trim() : undefined
   if (cakeColor && !/^#[0-9a-fA-F]{6}$/.test(cakeColor)) return { error: 'cakeColor must be a hex color string.' }
 
+  const businessCardProfile = parseBusinessCardProfile(body)
+  if (businessCardProfile && 'error' in businessCardProfile) return { error: businessCardProfile.error }
+
   const message = normalizeCakeText(value)
   if (!message) return { error: 'message must not be empty.' }
   if (message.length > MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS) {
     return { error: `message must be ${MAX_CUSTOM_CAKE_MESSAGE_CHARACTERS} characters or fewer.` }
   }
 
-  return { message, cakeColor }
+  return { message, cakeColor, businessCardProfile }
 }
 
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
@@ -656,7 +717,7 @@ export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
       const company = await getCompanyBySponsorEin(db, existingCake.sponsor_ein)
       if (!company) return c.json({ error: 'Company not found.' }, 404)
 
-      const cakeImage = await generateCakeImageForText(c.env, existingCake, cakeTextUpdate.message, cakeTextUpdate.cakeColor)
+      const cakeImage = await generateCakeImageForText(c.env, existingCake, cakeTextUpdate.message, cakeTextUpdate.cakeColor, cakeTextUpdate.businessCardProfile)
       const imageMimeType = cakeImage.media_type ?? 'image/png'
       const updatedAt = new Date().toISOString()
       const updatedCake = await updateCakeMessage(db, {
