@@ -1,6 +1,7 @@
 import type { Hono } from 'hono'
 import { ALLOWED_STATES, COMPANY_SIGNAL_TYPES, COVERAGE_TYPES, MS_PER_DAY, type CompanySignalType } from '../constants'
 import { bindAndQueryCompanyRenewalSignalRows, bindAndQueryCompanyRowsByEin } from '../db/renewals'
+import { createModelQueryServiceFromEnv } from '../services/model-queries'
 import type { AppBindings, CompanyDetailRow } from '../types'
 import { coverageTypeFromDbValue, parseCoverageTypes } from '../utils/coverage'
 import { estimatedRenewalDate, toIsoDate, todayUtc } from '../utils/dates'
@@ -184,7 +185,144 @@ function normalizeSponsorEin(value: string | undefined) {
   return sponsorEin || null
 }
 
+type GenerateCakeRequestBody = {
+  minCharacters?: unknown
+  maxCharacters?: unknown
+  min_characters?: unknown
+  max_characters?: unknown
+}
+
+type IntegerParseResult =
+  | {
+      value: number | undefined
+    }
+  | {
+      error: string
+    }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+async function parseOptionalJsonBody(req: { header: (name: string) => string | undefined; json: () => Promise<unknown> }) {
+  const contentType = req.header('content-type') ?? ''
+  if (!contentType.toLowerCase().includes('application/json')) return undefined
+
+  return req.json()
+}
+
+function parseOptionalPositiveInteger(body: unknown, camelCaseName: keyof GenerateCakeRequestBody, snakeCaseName: keyof GenerateCakeRequestBody): IntegerParseResult {
+  if (!isRecord(body)) return { value: undefined }
+
+  const value = body[camelCaseName] ?? body[snakeCaseName]
+  if (value === undefined || value === null) return { value: undefined }
+
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    return { error: `${String(camelCaseName)} must be a positive integer.` }
+  }
+
+  return { value }
+}
+
+function cakeProspectInformation(company: CompanyResponse) {
+  const upcomingRenewalSignal = company.signals.find((signal) => signal.type === 'upcoming_renewal')
+  const carriers = new Set(
+    upcomingRenewalSignal?.evidence
+      .map((evidence) => evidence.carrier.name)
+      .filter((carrierName): carrierName is string => Boolean(carrierName)) ?? [],
+  )
+
+  const location = [company.location.city, company.location.state, company.location.zip].filter(Boolean).join(', ')
+  const lines: string[] = []
+  const addLine = (label: string, value: string | number | null | undefined) => {
+    if (value !== null && value !== undefined && value !== '') lines.push(`${label}: ${value}`)
+  }
+
+  addLine('Company', company.name)
+  addLine('DBA', company.dba_name)
+  addLine('Location', location)
+  addLine('Business code', company.business_code)
+  addLine('Renewal signal', upcomingRenewalSignal?.label)
+  addLine('Estimated renewal date', upcomingRenewalSignal?.properties.earliest_estimated_renewal_date)
+  addLine('Days until renewal', upcomingRenewalSignal?.properties.minimum_days_until_renewal)
+  addLine('Coverage types', upcomingRenewalSignal?.properties.coverage_types.join(', '))
+  addLine('Covered lives at year end', formatInteger(company.metrics.total_covered_lives_eoy))
+  addLine('Total earned premium', formatUsd(company.metrics.total_earned_premium))
+  addLine('Known carriers', [...carriers].sort().join(', '))
+
+  return lines.join('\n')
+}
+
+function formatInteger(value: number | null) {
+  return value === null ? null : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
+}
+
+function formatUsd(value: number | null) {
+  return value === null
+    ? null
+    : new Intl.NumberFormat('en-US', { currency: 'USD', maximumFractionDigits: 0, style: 'currency' }).format(value)
+}
+
 export function registerCompaniesRoute(app: Hono<{ Bindings: AppBindings }>) {
+  app.post('/api/company/:sponsorEin/generate-cake', async (c) => {
+    const sponsorEin = normalizeSponsorEin(c.req.param('sponsorEin'))
+    if (!sponsorEin) return c.json({ error: 'sponsor_ein is required.' }, 400)
+
+    let body: unknown
+    try {
+      body = await parseOptionalJsonBody(c.req)
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const minCharactersResult = parseOptionalPositiveInteger(body, 'minCharacters', 'min_characters')
+    if ('error' in minCharactersResult) return c.json({ error: minCharactersResult.error }, 400)
+
+    const maxCharactersResult = parseOptionalPositiveInteger(body, 'maxCharacters', 'max_characters')
+    if ('error' in maxCharactersResult) return c.json({ error: maxCharactersResult.error }, 400)
+
+    if (
+      minCharactersResult.value !== undefined &&
+      maxCharactersResult.value !== undefined &&
+      minCharactersResult.value > maxCharactersResult.value
+    ) {
+      return c.json({ error: 'minCharacters must be less than or equal to maxCharacters.' }, 400)
+    }
+
+    const db = c.env.DB ?? c.env.MY_DB
+    if (!db) {
+      return c.json(
+        {
+          error: 'D1 database binding not found. Bind the seeded database as DB (preferred) or MY_DB.',
+        },
+        500,
+      )
+    }
+
+    if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured.' }, 500)
+
+    const queryResult = await bindAndQueryCompanyRowsByEin(db, sponsorEin)
+    if (queryResult.success === false) {
+      return c.json({ error: queryResult.error ?? 'Failed to query company.' }, 500)
+    }
+
+    const company = companyFromRows(queryResult.results ?? [], todayUtc())
+    if (!company) return c.json({ error: 'Company not found.' }, 404)
+
+    try {
+      const message = await createModelQueryServiceFromEnv(c.env).createCakeMessage({
+        prospectInformation: cakeProspectInformation(company),
+        minCharacters: minCharactersResult.value,
+        maxCharacters: maxCharactersResult.value,
+      })
+
+      return c.json({ message })
+    } catch (error) {
+      console.error('Failed to generate cake message.', error)
+      return c.json({ error: 'Failed to generate cake message.' }, 502)
+    }
+  })
+
   app.get('/api/company/:sponsorEin', async (c) => {
     const sponsorEin = normalizeSponsorEin(c.req.param('sponsorEin'))
     if (!sponsorEin) return c.json({ error: 'sponsor_ein is required.' }, 400)

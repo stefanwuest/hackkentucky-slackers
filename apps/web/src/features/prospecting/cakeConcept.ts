@@ -67,6 +67,29 @@ function shorten(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1).trim()}…`
 }
 
+function wrapText(value: string, maxLineLength: number, maxLines: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+
+  for (const word of words) {
+    const currentLine = lines.at(-1)
+    if (!currentLine) {
+      lines.push(word)
+      continue
+    }
+
+    if (`${currentLine} ${word}`.length <= maxLineLength) {
+      lines[lines.length - 1] = `${currentLine} ${word}`
+      continue
+    }
+
+    if (lines.length < maxLines) lines.push(word)
+  }
+
+  if (lines.length > maxLines) return lines.slice(0, maxLines)
+  return lines
+}
+
 export function selectPrimarySignal(company: Company) {
   return [...company.signals].sort((a, b) => a.properties.minimum_days_until_renewal - b.properties.minimum_days_until_renewal)[0] ?? null
 }
@@ -135,14 +158,13 @@ export function createCakePrompts(company: Company, hookMessage: string) {
 export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' | 'printableSvgDataUrl'>) {
   const palette = concept.palette
   const companyName = xmlEscape(shorten(concept.companyName, 34))
-  const initials = xmlEscape(concept.initials)
-  const hookText = shorten(concept.hookMessage, 74)
-  const hookLineOne = xmlEscape(hookText.slice(0, 38))
-  const hookLineTwo = xmlEscape(hookText.slice(38))
-  const days = xmlEscape(concept.summary.daysUntilRenewal)
-  const renewal = xmlEscape(concept.summary.estimatedRenewalDate)
+  const messageLines = wrapText(shorten(concept.hookMessage, 110), 22, 4)
+  const firstDy = messageLines.length === 1 ? 0 : -((messageLines.length - 1) * 42) / 2
+  const messageTspans = messageLines
+    .map((line, index) => `<tspan x="450" dy="${index === 0 ? firstDy : 56}">${xmlEscape(line)}</tspan>`)
+    .join('\n    ')
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable cake design for ${companyName}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Printable cake message for ${companyName}">
   <defs>
     <radialGradient id="frosting" cx="50%" cy="45%" r="58%">
       <stop offset="0%" stop-color="${palette.frosting}"/>
@@ -156,28 +178,16 @@ export function buildPrintableCakeSvg(concept: Omit<CakeConcept, 'printableSvg' 
   <rect width="900" height="900" rx="92" fill="${palette.secondary}"/>
   <circle cx="450" cy="450" r="374" fill="url(#frosting)" filter="url(#shadow)"/>
   <circle cx="450" cy="450" r="322" fill="none" stroke="#ffffff" stroke-width="18" stroke-dasharray="12 24" opacity="0.95"/>
-  <circle cx="450" cy="286" r="96" fill="#ffffff" opacity="0.92"/>
-  <text x="450" y="314" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="70" font-weight="900" fill="${palette.primary}">${initials}</text>
-  <text x="450" y="430" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900" fill="${palette.ink}">${companyName}</text>
-  <rect x="230" y="466" width="440" height="78" rx="39" fill="#ffffff" opacity="0.9"/>
-  <text x="450" y="517" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" fill="${palette.accent}">${days}</text>
-  <text x="450" y="584" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" fill="${palette.ink}">Estimated renewal: ${renewal}</text>
-  <text x="450" y="656" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="800" fill="${palette.ink}">
-    <tspan x="450" dy="0">${hookLineOne}</tspan>
-    <tspan x="450" dy="38">${hookLineTwo}</tspan>
+  <text x="450" y="460" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" fill="${palette.ink}">
+    ${messageTspans}
   </text>
-  <path d="M178 215 C230 166 285 166 338 215" fill="none" stroke="${palette.accent}" stroke-width="18" stroke-linecap="round"/>
-  <path d="M562 215 C615 166 670 166 722 215" fill="none" stroke="${palette.accent}" stroke-width="18" stroke-linecap="round"/>
-  <circle cx="228" cy="718" r="16" fill="${palette.accent}"/>
-  <circle cx="672" cy="718" r="16" fill="${palette.accent}"/>
-  <text x="450" y="775" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="900" fill="${palette.ink}" letter-spacing="3">CAKE MY PROSPECT</text>
 </svg>`
 }
 
-export function createCakeConcept(company: Company): CakeConcept {
+export function createCakeConcept(company: Company, generatedCakeMessage?: string): CakeConcept {
   const companyName = getCompanyDisplayName(company)
   const primarySignal = selectPrimarySignal(company)
-  const hookMessage = generateCakeHook(company)
+  const hookMessage = generatedCakeMessage?.trim() || generateCakeHook(company)
   const palette = getCakePalette(companyName)
   const carrierNames = getCarrierNames(primarySignal)
   const coverageTypes = primarySignal?.properties.coverage_types.map(formatCoverageType) ?? []

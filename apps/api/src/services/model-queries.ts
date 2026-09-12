@@ -105,6 +105,8 @@ export function createModelQueryService(options: ModelQueryServiceOptions): Mode
   }
 
   async function createCakeMessage({ prospectInformation, minCharacters = 35, maxCharacters = 90 }: CakeMessageRequest) {
+    validateCharacterRange(minCharacters, maxCharacters)
+
     const response = await singleTurnJsonQuery<CakeMessageResponse>({
       schemaName: 'cake_message',
       schemaDescription: 'A short, witty message suitable for writing on a prospecting cake.',
@@ -171,6 +173,20 @@ function parseCakeMessageResponse(value: unknown): CakeMessageResponse {
 
   return {
     message: value.message,
+  }
+}
+
+function validateCharacterRange(minCharacters: number, maxCharacters: number) {
+  if (!Number.isInteger(minCharacters) || minCharacters <= 0) {
+    throw new Error('minCharacters must be a positive integer.')
+  }
+
+  if (!Number.isInteger(maxCharacters) || maxCharacters <= 0) {
+    throw new Error('maxCharacters must be a positive integer.')
+  }
+
+  if (minCharacters > maxCharacters) {
+    throw new Error('minCharacters must be less than or equal to maxCharacters.')
   }
 }
 

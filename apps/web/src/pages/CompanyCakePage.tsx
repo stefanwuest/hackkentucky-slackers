@@ -11,6 +11,11 @@ type CompanyCakeRouteState = {
   company?: Company
 }
 
+type CakeMessageResponse = {
+  message: string
+  error?: string
+}
+
 function decodeRouteId(value: string | undefined) {
   if (!value) return undefined
 
@@ -24,6 +29,10 @@ function decodeRouteId(value: string | undefined) {
 async function fetchCompanyByEin([, companyEin]: readonly ['company', string]) {
   const payload = await api.get<CompanyResponse>(`/api/company/${encodeURIComponent(companyEin)}`)
   return payload.company
+}
+
+async function generateCakeMessage([, companyEin]: readonly ['cake-message', string]) {
+  return api.post<CakeMessageResponse>(`/api/company/${encodeURIComponent(companyEin)}/generate-cake`)
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -84,11 +93,26 @@ export function CompanyCakePage() {
 
   const company = fetchedCompany ?? cachedCompany
 
+  const {
+    data: cakeMessageResponse,
+    error: cakeMessageError,
+    isLoading: isGeneratingCakeMessage,
+    isValidating: isRegeneratingCakeMessage,
+    mutate: regenerateCakeMessage,
+  } = useSWR<CakeMessageResponse, Error, readonly ['cake-message', string] | null>(
+    companyEin && company ? ['cake-message', companyEin] : null,
+    generateCakeMessage,
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+    },
+  )
+
   useEffect(() => {
     if (company) storeCakeCompany(company)
   }, [company])
 
-  const concept = useMemo(() => (company ? createCakeConcept(company) : null), [company])
+  const concept = useMemo(() => (company ? createCakeConcept(company, cakeMessageResponse?.message) : null), [cakeMessageResponse?.message, company])
 
   if (!company && isLoading) return <LoadingCompanyFallback />
   if (!company && error) return <MissingCompanyFallback message={error.message} />
@@ -102,7 +126,7 @@ export function CompanyCakePage() {
         </Link>
         <span className="cake-eyebrow">Cake my prospect</span>
         <h1>{concept.companyName}</h1>
-        <p>{concept.hookMessage}</p>
+        <p>Review the printable cake design and mockup for this prospect.</p>
       </header>
 
       <div className="cake-detail-layout">
@@ -125,10 +149,6 @@ export function CompanyCakePage() {
               <SummaryItem label="Carriers" value={concept.summary.carrierNames} />
             </dl>
 
-            <div className="cake-hook-card">
-              <span>Cake hook</span>
-              <p>{concept.hookMessage}</p>
-            </div>
           </div>
         </aside>
 
@@ -139,6 +159,8 @@ export function CompanyCakePage() {
                 <div>
                   <span className="cake-eyebrow">SVG fallback</span>
                   <h2>Printable cake design</h2>
+                  {isGeneratingCakeMessage ? <p>Generating cake copy…</p> : null}
+                  {cakeMessageError ? <p>Using fallback cake copy.</p> : null}
                 </div>
                 <a className="cake-download-button" href={concept.printableSvgDataUrl} download={`${concept.initials.toLowerCase()}-cake-design.svg`}>
                   Download SVG
@@ -175,8 +197,8 @@ export function CompanyCakePage() {
           </section>
 
           <section className="cake-action-section" aria-label="Cake actions">
-            <button className="cake-action-button" type="button">
-              Regenerate
+            <button className="cake-action-button" type="button" disabled={isRegeneratingCakeMessage} onClick={() => void regenerateCakeMessage()}>
+              {isRegeneratingCakeMessage ? 'Generating…' : 'Regenerate'}
             </button>
             <button className="cake-action-button cake-action-button-primary" type="button">
               Continue

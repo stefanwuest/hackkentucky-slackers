@@ -7,6 +7,10 @@ export type ApiRequestOptions = Omit<RequestInit, 'body' | 'method'> & {
   searchParams?: QueryParams
 }
 
+type InternalApiRequestOptions = Omit<RequestInit, 'method'> & {
+  searchParams?: QueryParams
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -60,7 +64,7 @@ async function parseResponse(response: Response) {
   return response.text()
 }
 
-async function request<T>(method: string, path: string, { searchParams, ...init }: ApiRequestOptions = {}) {
+async function request<T>(method: string, path: string, { searchParams, ...init }: InternalApiRequestOptions = {}) {
   const response = await fetch(buildUrl(path, searchParams), { ...init, method })
   const payload = await parseResponse(response)
 
@@ -71,6 +75,18 @@ async function request<T>(method: string, path: string, { searchParams, ...init 
   return payload as T
 }
 
+function jsonHeaders(headers: HeadersInit | undefined) {
+  const nextHeaders = new Headers(headers)
+  if (!nextHeaders.has('content-type')) nextHeaders.set('content-type', 'application/json')
+  return nextHeaders
+}
+
 export const api = {
   get: <T>(path: string, options?: ApiRequestOptions) => request<T>('GET', path, options),
+  post: <T>(path: string, body?: unknown, options?: ApiRequestOptions) =>
+    request<T>('POST', path, {
+      ...options,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined ? options?.headers : jsonHeaders(options?.headers),
+    }),
 }
