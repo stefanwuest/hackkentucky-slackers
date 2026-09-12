@@ -124,6 +124,7 @@ button {
 .app-shell {
   display: flex;
   width: 100%;
+  min-height: 100vh;
   margin: 0;
   padding: 36px 32px 48px;
   flex-direction: column;
@@ -494,6 +495,8 @@ tr:hover .sticky-action-column {
 
 .cake-page {
   display: flex;
+  min-height: calc(100vh - 84px);
+  flex: 1;
   flex-direction: column;
   gap: 22px;
 }
@@ -539,19 +542,21 @@ tr:hover .sticky-action-column {
 
 .cake-detail-layout {
   display: grid;
+  min-height: 0;
+  flex: 1;
   grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .cake-sidebar {
   position: sticky;
   top: 16px;
+  align-self: start;
 }
 
 .cake-sidebar-card,
-.cake-output-card,
-.prompt-card {
+.cake-output-card {
   border: 1px solid rgba(59, 18, 48, 0.1);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.92);
@@ -566,9 +571,7 @@ tr:hover .sticky-action-column {
 }
 
 .cake-sidebar-card h2,
-.cake-output-card h2,
-.ai-prompts-header h2,
-.prompt-card h3 {
+.cake-output-card h2 {
   margin: 0;
   color: #3b1230;
 }
@@ -644,16 +647,18 @@ tr:hover .sticky-action-column {
   line-height: 1.5;
 }
 
-.cake-main,
-.ai-prompts-section {
+.cake-main {
   display: flex;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 20px;
 }
 
 .cake-output-grid {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
@@ -666,17 +671,14 @@ tr:hover .sticky-action-column {
   padding: 20px;
 }
 
-.cake-output-header,
-.prompt-card-header,
-.ai-prompts-header {
+.cake-output-header {
   display: flex;
   gap: 12px;
   align-items: flex-start;
   justify-content: space-between;
 }
 
-.cake-output-header > div,
-.ai-prompts-header {
+.cake-output-header > div {
   min-width: 0;
 }
 
@@ -815,51 +817,47 @@ tr:hover .sticky-action-column {
 .cake-sprinkles span:nth-child(4) { bottom: 54px; right: 19%; transform: rotate(12deg); }
 .cake-sprinkles span:nth-child(5) { top: 36%; right: 8%; transform: rotate(42deg); background: #ffffff; }
 
-.ai-prompts-section {
+.cake-action-section {
+  display: grid;
+  min-height: 220px;
+  flex: 1;
+  grid-auto-rows: minmax(220px, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.cake-action-button {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
   border: 1px solid rgba(59, 18, 48, 0.1);
   border-radius: 30px;
-  padding: 20px;
-  background: linear-gradient(135deg, rgba(255, 247, 251, 0.9), rgba(255, 255, 255, 0.92));
+  padding: 32px;
+  color: #3b1230;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 50px rgba(59, 18, 48, 0.08);
+  font-size: clamp(1.55rem, 3.5vw, 3.6rem);
+  font-weight: 950;
+  letter-spacing: -0.04em;
 }
 
-.ai-prompts-header {
-  flex-direction: column;
-  justify-content: flex-start;
+.cake-action-button-primary {
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ec4899, #f97316);
+  box-shadow: 0 26px 70px rgba(236, 72, 153, 0.26);
 }
 
-.ai-prompts-header p {
-  max-width: 760px;
-  margin: 0;
-  color: #6b7280;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.prompt-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.prompt-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.prompt-card p {
-  margin: 0;
-  color: #394150;
-  font-size: 0.9rem;
-  font-weight: 650;
-  line-height: 1.65;
+.cake-action-button:hover {
+  transform: translateY(-2px);
 }
 
 @media (max-width: 980px) {
   .cake-detail-layout,
   .cake-output-grid,
-  .prompt-grid {
+  .cake-action-section {
     grid-template-columns: 1fr;
   }
 
@@ -902,13 +900,12 @@ tr:hover .sticky-action-column {
   .cake-detail-hero,
   .cake-fallback-card,
   .cake-output-card,
-  .ai-prompts-section {
+  .cake-action-button {
     border-radius: 22px;
     padding: 18px;
   }
 
-  .cake-output-header,
-  .prompt-card-header {
+  .cake-output-header {
     flex-direction: column;
   }
 
@@ -919,6 +916,11 @@ tr:hover .sticky-action-column {
 
   .cake-mockup-scene {
     min-height: 380px;
+  }
+
+  .cake-action-section {
+    min-height: 320px;
+    grid-auto-rows: minmax(150px, 1fr);
   }
 
   .cake-base img {

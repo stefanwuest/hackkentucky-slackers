@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 
@@ -9,11 +9,6 @@ import { api } from '../lib/api'
 
 type CompanyCakeRouteState = {
   company?: Company
-}
-
-type CopyButtonProps = {
-  value: string
-  label?: string
 }
 
 function decodeRouteId(value: string | undefined) {
@@ -40,22 +35,6 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   )
 }
 
-function CopyButton({ value, label = 'Copy prompt' }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(value)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
-  }
-
-  return (
-    <button className="cake-copy-button" type="button" onClick={() => void handleCopy()}>
-      {copied ? 'Copied!' : label}
-    </button>
-  )
-}
-
 function MissingCompanyFallback({ message }: { message?: string }) {
   return (
     <section className="cake-fallback-card">
@@ -79,18 +58,6 @@ function LoadingCompanyFallback() {
       <h1>Loading company details…</h1>
       <p>Fetching the latest company data for this EIN.</p>
     </section>
-  )
-}
-
-function PromptCard({ title, prompt }: { title: string; prompt: string }) {
-  return (
-    <article className="prompt-card">
-      <div className="prompt-card-header">
-        <h3>{title}</h3>
-        <CopyButton value={prompt} />
-      </div>
-      <p>{prompt}</p>
-    </article>
   )
 }
 
@@ -207,16 +174,13 @@ export function CompanyCakePage() {
             </article>
           </section>
 
-          <section className="ai-prompts-section">
-            <div className="ai-prompts-header">
-              <span className="cake-eyebrow">Phase 2 ready</span>
-              <h2>AI image prompts</h2>
-              <p>These deterministic prompts can later be sent to a real image-generation endpoint behind this same UI.</p>
-            </div>
-            <div className="prompt-grid">
-              <PromptCard title="Printable cake topper prompt" prompt={concept.designPrompt} />
-              <PromptCard title="Cake mockup prompt" prompt={concept.mockupPrompt} />
-            </div>
+          <section className="cake-action-section" aria-label="Cake actions">
+            <button className="cake-action-button" type="button">
+              Regenerate
+            </button>
+            <button className="cake-action-button cake-action-button-primary" type="button">
+              Continue
+            </button>
           </section>
         </main>
       </div>
