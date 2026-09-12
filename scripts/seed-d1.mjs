@@ -782,15 +782,15 @@ SELECT ic."contract_id", 'dental' FROM "insurance_contracts" ic INNER JOIN "sche
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
 SELECT ic."contract_id", 'vision' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_VISION_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
-SELECT ic."contract_id", 'life' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_LIFE_INSUR_IND" = '1';
+SELECT ic."contract_id", 'life_insurance' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_LIFE_INSUR_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
-SELECT ic."contract_id", 'temporary_disability' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_TEMP_DISAB_IND" = '1';
+SELECT ic."contract_id", 'short_term_disability' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_TEMP_DISAB_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
 SELECT ic."contract_id", 'long_term_disability' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_LONG_TERM_DISAB_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
 SELECT ic."contract_id", 'unemployment' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_UNEMP_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
-SELECT ic."contract_id", 'drug' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_DRUG_IND" = '1';
+SELECT ic."contract_id", 'prescription_drug' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_DRUG_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
 SELECT ic."contract_id", 'stop_loss' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_STOP_LOSS_IND" = '1';
 INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
