@@ -67,6 +67,55 @@ Instead of asking brokers to manually dig through filings, this project converts
 
 ## API
 
+### `GET /api/companies`
+
+Returns company-centered prospect results with signal objects instead of raw filing rows. The first supported signal is `upcoming_renewal`.
+
+Query parameters:
+
+- `state` — required 2-letter sponsor mailing state.
+- `signal` / `signal_type` — optional array; defaults to `upcoming_renewal`. Supported values: `upcoming_renewal`.
+- `coverage_type` — optional array; same supported values and formats as `/api/renewals`.
+- `days_to_renewal` / `days_to_renewal_lt` / `days_to_renewal_lte` / `days_to_renewal_gt` / `days_to_renewal_gte` — optional upcoming-renewal filters, same semantics as `/api/renewals`.
+- `limit` — optional integer from `1` to `200`, default `50`.
+
+Example:
+
+```txt
+/api/companies?state=KY&signal=upcoming_renewal&coverage_type=health&days_to_renewal_lte=90
+```
+
+Response shape:
+
+```json
+{
+  "count": 1,
+  "total_count": 12,
+  "companies": [
+    {
+      "company_id": "ein:123456789",
+      "name": "Example Employer",
+      "location": { "city": "Louisville", "state": "KY", "zip": "40202" },
+      "metrics": { "plan_count": 1, "contract_count": 2, "carrier_count": 1 },
+      "signals": [
+        {
+          "type": "upcoming_renewal",
+          "severity": "medium",
+          "label": "Renewal likely in 42 days",
+          "properties": {
+            "earliest_estimated_renewal_date": "YYYY-MM-DD",
+            "minimum_days_until_renewal": 42,
+            "renewal_contract_count": 2,
+            "coverage_types": ["health"]
+          },
+          "evidence": []
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### `GET /api/renewals`
 
 Returns Schedule A renewals for a required sponsor mailing `state`.
