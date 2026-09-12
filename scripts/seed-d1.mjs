@@ -379,6 +379,457 @@ function createTableSql(dataset, fields) {
   return `CREATE TABLE IF NOT EXISTS ${quoteIdent(dataset.table)} (\n${columns.concat(constraints).join(',\n')}\n);\n`
 }
 
+function derivedTableNames() {
+  return [
+    'contract_coverage_types',
+    'company_contract_summary',
+    'insurance_contracts',
+    'filings',
+    'plans',
+    'companies',
+  ]
+}
+
+function derivedSchemaSql() {
+  return `
+CREATE TABLE IF NOT EXISTS "companies" (
+  "company_id" TEXT PRIMARY KEY,
+  "source_key_type" TEXT NOT NULL,
+  "sponsor_ein" TEXT,
+  "normalized_name" TEXT NOT NULL,
+  "display_name" TEXT,
+  "dba_name" TEXT,
+  "mail_city" TEXT,
+  "mail_state" TEXT,
+  "mail_zip" TEXT,
+  "loc_city" TEXT,
+  "loc_state" TEXT,
+  "loc_zip" TEXT,
+  "phone" TEXT,
+  "business_code" TEXT,
+  "filing_count" INTEGER NOT NULL DEFAULT 0,
+  "plan_count" INTEGER NOT NULL DEFAULT 0,
+  "latest_date_received" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "plans" (
+  "plan_id" TEXT PRIMARY KEY,
+  "company_id" TEXT NOT NULL,
+  "sponsor_plan_number" TEXT,
+  "plan_name" TEXT,
+  "normalized_plan_name" TEXT,
+  "plan_effective_date" TEXT,
+  "filing_count" INTEGER NOT NULL DEFAULT 0,
+  "latest_ack_id" TEXT,
+  FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "filings" (
+  "ack_id" TEXT PRIMARY KEY,
+  "company_id" TEXT NOT NULL,
+  "plan_id" TEXT NOT NULL,
+  "form_plan_year_begin_date" TEXT,
+  "form_tax_prd" TEXT,
+  "initial_filing_ind" TEXT,
+  "amended_ind" TEXT,
+  "final_filing_ind" TEXT,
+  "short_plan_year_ind" TEXT,
+  "filing_status" TEXT,
+  "date_received" TEXT,
+  "total_participants_boy" NUMERIC,
+  "total_active_participants" NUMERIC,
+  "total_active_participants_boy" NUMERIC,
+  "participant_account_balance_count" NUMERIC,
+  "type_pension_benefit_code" TEXT,
+  "type_welfare_benefit_code" TEXT,
+  "funding_insurance_ind" TEXT,
+  "benefit_insurance_ind" TEXT,
+  "schedule_a_attached_ind" TEXT,
+  "schedule_a_attached_count" NUMERIC,
+  FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE CASCADE,
+  FOREIGN KEY ("plan_id") REFERENCES "plans"("plan_id") ON DELETE CASCADE,
+  FOREIGN KEY ("ack_id") REFERENCES "form_5500_2025_latest"("ACK_ID") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "insurance_contracts" (
+  "contract_id" TEXT PRIMARY KEY,
+  "raw_schedule_a_rowid" INTEGER NOT NULL,
+  "ack_id" TEXT NOT NULL,
+  "company_id" TEXT NOT NULL,
+  "plan_id" TEXT NOT NULL,
+  "form_id" TEXT,
+  "schedule_a_plan_year_begin_date" TEXT,
+  "schedule_a_plan_year_end_date" TEXT,
+  "schedule_a_plan_number" TEXT,
+  "schedule_a_ein" TEXT,
+  "carrier_name" TEXT,
+  "carrier_ein" TEXT,
+  "carrier_naic_code" TEXT,
+  "carrier_key" TEXT,
+  "contract_number" TEXT,
+  "contract_key" TEXT,
+  "covered_lives_eoy" NUMERIC,
+  "policy_from_date" TEXT,
+  "policy_to_date" TEXT,
+  "policy_end_month" TEXT,
+  "policy_end_month_day" TEXT,
+  "broker_commission_total" NUMERIC,
+  "broker_fees_total" NUMERIC,
+  "premium_received" NUMERIC,
+  "total_earned_premium" NUMERIC,
+  "claims_paid" NUMERIC,
+  "incurred_claims" NUMERIC,
+  "retained_commissions" NUMERIC,
+  "retained_admin" NUMERIC,
+  "retained_total" NUMERIC,
+  "refund_amount" NUMERIC,
+  "held_benefits" NUMERIC,
+  "claims_reserve" NUMERIC,
+  "total_charges_paid" NUMERIC,
+  "acquisition_cost" NUMERIC,
+  "failed_to_provide_info_ind" TEXT,
+  "other_coverage_text" TEXT,
+  FOREIGN KEY ("ack_id") REFERENCES "filings"("ack_id") ON DELETE CASCADE,
+  FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE CASCADE,
+  FOREIGN KEY ("plan_id") REFERENCES "plans"("plan_id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "contract_coverage_types" (
+  "contract_id" TEXT NOT NULL,
+  "coverage_type" TEXT NOT NULL,
+  PRIMARY KEY ("contract_id", "coverage_type"),
+  FOREIGN KEY ("contract_id") REFERENCES "insurance_contracts"("contract_id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "company_contract_summary" (
+  "company_id" TEXT PRIMARY KEY,
+  "contract_count" INTEGER NOT NULL DEFAULT 0,
+  "carrier_count" INTEGER NOT NULL DEFAULT 0,
+  "contract_number_count" INTEGER NOT NULL DEFAULT 0,
+  "policy_end_month_count" INTEGER NOT NULL DEFAULT 0,
+  "earliest_policy_to_date" TEXT,
+  "latest_policy_to_date" TEXT,
+  "total_covered_lives_eoy" NUMERIC,
+  "total_premium_received" NUMERIC,
+  "total_earned_premium" NUMERIC,
+  FOREIGN KEY ("company_id") REFERENCES "companies"("company_id") ON DELETE CASCADE
+);
+`
+}
+
+function derivedPopulateSql() {
+  const formBaseCte = `
+WITH form_base AS (
+  SELECT
+    f.*,
+    CASE
+      WHEN NULLIF(TRIM(f."SPONS_DFE_EIN"), '') IS NOT NULL THEN 'ein:' || TRIM(f."SPONS_DFE_EIN")
+      ELSE 'name:' || LOWER(TRIM(REPLACE(REPLACE(REPLACE(COALESCE(f."SPONSOR_DFE_NAME", ''), char(9), ' '), '.', ''), ',', ''))) ||
+        '|state:' || COALESCE(NULLIF(TRIM(f."SPONS_DFE_MAIL_US_STATE"), ''), 'unknown') ||
+        '|zip:' || COALESCE(NULLIF(SUBSTR(TRIM(f."SPONS_DFE_MAIL_US_ZIP"), 1, 5), ''), 'unknown')
+    END AS company_id,
+    CASE WHEN NULLIF(TRIM(f."SPONS_DFE_EIN"), '') IS NOT NULL THEN 'ein' ELSE 'name_state_zip' END AS source_key_type,
+    LOWER(TRIM(REPLACE(REPLACE(REPLACE(COALESCE(f."SPONSOR_DFE_NAME", ''), char(9), ' '), '.', ''), ',', ''))) AS normalized_name,
+    LOWER(TRIM(REPLACE(REPLACE(REPLACE(COALESCE(f."PLAN_NAME", ''), char(9), ' '), '.', ''), ',', ''))) AS normalized_plan_name
+  FROM "form_5500_2025_latest" f
+), form_keys AS (
+  SELECT
+    form_base.*,
+    form_base.company_id || ':plan:' ||
+      CASE
+        WHEN NULLIF(TRIM(form_base."SPONS_DFE_PN"), '') IS NOT NULL THEN 'pn:' || TRIM(form_base."SPONS_DFE_PN")
+        ELSE 'name:' || form_base.normalized_plan_name
+      END AS plan_id
+  FROM form_base
+)`
+
+  return `
+${formBaseCte}, ranked_companies AS (
+  SELECT
+    form_keys.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY company_id
+      ORDER BY COALESCE("DATE_RECEIVED", '') DESC, COALESCE("FORM_PLAN_YEAR_BEGIN_DATE", '') DESC, "ACK_ID" DESC
+    ) AS company_rank
+  FROM form_keys
+), company_counts AS (
+  SELECT
+    company_id,
+    COUNT(*) AS filing_count,
+    COUNT(DISTINCT plan_id) AS plan_count,
+    MAX("DATE_RECEIVED") AS latest_date_received
+  FROM form_keys
+  GROUP BY company_id
+)
+INSERT INTO "companies" (
+  "company_id",
+  "source_key_type",
+  "sponsor_ein",
+  "normalized_name",
+  "display_name",
+  "dba_name",
+  "mail_city",
+  "mail_state",
+  "mail_zip",
+  "loc_city",
+  "loc_state",
+  "loc_zip",
+  "phone",
+  "business_code",
+  "filing_count",
+  "plan_count",
+  "latest_date_received"
+)
+SELECT
+  r.company_id,
+  r.source_key_type,
+  NULLIF(TRIM(r."SPONS_DFE_EIN"), ''),
+  r.normalized_name,
+  r."SPONSOR_DFE_NAME",
+  r."SPONS_DFE_DBA_NAME",
+  r."SPONS_DFE_MAIL_US_CITY",
+  r."SPONS_DFE_MAIL_US_STATE",
+  r."SPONS_DFE_MAIL_US_ZIP",
+  r."SPONS_DFE_LOC_US_CITY",
+  r."SPONS_DFE_LOC_US_STATE",
+  r."SPONS_DFE_LOC_US_ZIP",
+  r."SPONS_DFE_PHONE_NUM",
+  r."BUSINESS_CODE",
+  c.filing_count,
+  c.plan_count,
+  c.latest_date_received
+FROM ranked_companies r
+INNER JOIN company_counts c ON c.company_id = r.company_id
+WHERE r.company_rank = 1;
+
+${formBaseCte}, ranked_plans AS (
+  SELECT
+    form_keys.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY plan_id
+      ORDER BY COALESCE("DATE_RECEIVED", '') DESC, COALESCE("FORM_PLAN_YEAR_BEGIN_DATE", '') DESC, "ACK_ID" DESC
+    ) AS plan_rank
+  FROM form_keys
+), plan_counts AS (
+  SELECT
+    plan_id,
+    COUNT(*) AS filing_count
+  FROM form_keys
+  GROUP BY plan_id
+)
+INSERT INTO "plans" (
+  "plan_id",
+  "company_id",
+  "sponsor_plan_number",
+  "plan_name",
+  "normalized_plan_name",
+  "plan_effective_date",
+  "filing_count",
+  "latest_ack_id"
+)
+SELECT
+  r.plan_id,
+  r.company_id,
+  NULLIF(TRIM(r."SPONS_DFE_PN"), ''),
+  r."PLAN_NAME",
+  r.normalized_plan_name,
+  r."PLAN_EFF_DATE",
+  c.filing_count,
+  r."ACK_ID"
+FROM ranked_plans r
+INNER JOIN plan_counts c ON c.plan_id = r.plan_id
+WHERE r.plan_rank = 1;
+
+${formBaseCte}
+INSERT INTO "filings" (
+  "ack_id",
+  "company_id",
+  "plan_id",
+  "form_plan_year_begin_date",
+  "form_tax_prd",
+  "initial_filing_ind",
+  "amended_ind",
+  "final_filing_ind",
+  "short_plan_year_ind",
+  "filing_status",
+  "date_received",
+  "total_participants_boy",
+  "total_active_participants",
+  "total_active_participants_boy",
+  "participant_account_balance_count",
+  "type_pension_benefit_code",
+  "type_welfare_benefit_code",
+  "funding_insurance_ind",
+  "benefit_insurance_ind",
+  "schedule_a_attached_ind",
+  "schedule_a_attached_count"
+)
+SELECT
+  "ACK_ID",
+  company_id,
+  plan_id,
+  "FORM_PLAN_YEAR_BEGIN_DATE",
+  "FORM_TAX_PRD",
+  "INITIAL_FILING_IND",
+  "AMENDED_IND",
+  "FINAL_FILING_IND",
+  "SHORT_PLAN_YR_IND",
+  "FILING_STATUS",
+  "DATE_RECEIVED",
+  "TOT_PARTCP_BOY_CNT",
+  "TOT_ACTIVE_PARTCP_CNT",
+  "TOT_ACT_PARTCP_BOY_CNT",
+  "PARTCP_ACCOUNT_BAL_CNT",
+  "TYPE_PENSION_BNFT_CODE",
+  "TYPE_WELFARE_BNFT_CODE",
+  "FUNDING_INSURANCE_IND",
+  "BENEFIT_INSURANCE_IND",
+  "SCH_A_ATTACHED_IND",
+  "NUM_SCH_A_ATTACHED_CNT"
+FROM form_keys;
+
+INSERT INTO "insurance_contracts" (
+  "contract_id",
+  "raw_schedule_a_rowid",
+  "ack_id",
+  "company_id",
+  "plan_id",
+  "form_id",
+  "schedule_a_plan_year_begin_date",
+  "schedule_a_plan_year_end_date",
+  "schedule_a_plan_number",
+  "schedule_a_ein",
+  "carrier_name",
+  "carrier_ein",
+  "carrier_naic_code",
+  "carrier_key",
+  "contract_number",
+  "contract_key",
+  "covered_lives_eoy",
+  "policy_from_date",
+  "policy_to_date",
+  "policy_end_month",
+  "policy_end_month_day",
+  "broker_commission_total",
+  "broker_fees_total",
+  "premium_received",
+  "total_earned_premium",
+  "claims_paid",
+  "incurred_claims",
+  "retained_commissions",
+  "retained_admin",
+  "retained_total",
+  "refund_amount",
+  "held_benefits",
+  "claims_reserve",
+  "total_charges_paid",
+  "acquisition_cost",
+  "failed_to_provide_info_ind",
+  "other_coverage_text"
+)
+SELECT
+  'schedule_a:' || s.rowid,
+  s.rowid,
+  s."ACK_ID",
+  f."company_id",
+  f."plan_id",
+  s."FORM_ID",
+  s."SCH_A_PLAN_YEAR_BEGIN_DATE",
+  s."SCH_A_PLAN_YEAR_END_DATE",
+  s."SCH_A_PLAN_NUM",
+  s."SCH_A_EIN",
+  s."INS_CARRIER_NAME",
+  s."INS_CARRIER_EIN",
+  s."INS_CARRIER_NAIC_CODE",
+  CASE
+    WHEN NULLIF(TRIM(COALESCE(s."INS_CARRIER_NAME", '')), '') IS NULL
+      AND NULLIF(TRIM(COALESCE(s."INS_CARRIER_EIN", '')), '') IS NULL
+      AND NULLIF(TRIM(COALESCE(s."INS_CARRIER_NAIC_CODE", '')), '') IS NULL THEN NULL
+    ELSE LOWER(TRIM(COALESCE(s."INS_CARRIER_NAME", ''))) || '|' ||
+      COALESCE(NULLIF(TRIM(s."INS_CARRIER_EIN"), ''), '') || '|' ||
+      COALESCE(NULLIF(TRIM(s."INS_CARRIER_NAIC_CODE"), ''), '')
+  END,
+  s."INS_CONTRACT_NUM",
+  NULLIF(UPPER(TRIM(COALESCE(s."INS_CONTRACT_NUM", ''))), ''),
+  s."INS_PRSN_COVERED_EOY_CNT",
+  s."INS_POLICY_FROM_DATE",
+  s."INS_POLICY_TO_DATE",
+  CASE WHEN LENGTH(TRIM(COALESCE(s."INS_POLICY_TO_DATE", ''))) >= 7 THEN SUBSTR(TRIM(s."INS_POLICY_TO_DATE"), 6, 2) ELSE NULL END,
+  CASE WHEN LENGTH(TRIM(COALESCE(s."INS_POLICY_TO_DATE", ''))) >= 10 THEN SUBSTR(TRIM(s."INS_POLICY_TO_DATE"), 6, 5) ELSE NULL END,
+  s."INS_BROKER_COMM_TOT_AMT",
+  s."INS_BROKER_FEES_TOT_AMT",
+  s."WLFR_PREMIUM_RCVD_AMT",
+  s."WLFR_TOT_EARNED_PREM_AMT",
+  s."WLFR_CLAIMS_PAID_AMT",
+  s."WLFR_INCURRED_CLAIM_AMT",
+  s."WLFR_RET_COMMISSIONS_AMT",
+  s."WLFR_RET_ADMIN_AMT",
+  s."WLFR_RET_TOT_AMT",
+  s."WLFR_REFUND_AMT",
+  s."WLFR_HELD_BNFTS_AMT",
+  s."WLFR_CLAIMS_RESERVE_AMT",
+  s."WLFR_TOT_CHARGES_PAID_AMT",
+  s."WLFR_ACQUIS_COST_AMT",
+  s."INS_FAIL_PROVIDE_INFO_IND",
+  s."WLFR_TYPE_BNFT_OTH_TEXT"
+FROM "schedule_a_2025_latest" s
+INNER JOIN "filings" f ON f."ack_id" = s."ACK_ID";
+
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'health' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_HEALTH_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'dental' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_DENTAL_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'vision' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_VISION_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'life' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_LIFE_INSUR_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'temporary_disability' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_TEMP_DISAB_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'long_term_disability' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_LONG_TERM_DISAB_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'unemployment' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_UNEMP_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'drug' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_DRUG_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'stop_loss' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_STOP_LOSS_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'hmo' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_HMO_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'ppo' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_PPO_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'indemnity' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_INDEMNITY_IND" = '1';
+INSERT INTO "contract_coverage_types" ("contract_id", "coverage_type")
+SELECT ic."contract_id", 'other' FROM "insurance_contracts" ic INNER JOIN "schedule_a_2025_latest" s ON s.rowid = ic."raw_schedule_a_rowid" WHERE s."WLFR_BNFT_OTHER_IND" = '1';
+
+INSERT INTO "company_contract_summary" (
+  "company_id",
+  "contract_count",
+  "carrier_count",
+  "contract_number_count",
+  "policy_end_month_count",
+  "earliest_policy_to_date",
+  "latest_policy_to_date",
+  "total_covered_lives_eoy",
+  "total_premium_received",
+  "total_earned_premium"
+)
+SELECT
+  "company_id",
+  COUNT(*) AS contract_count,
+  COUNT(DISTINCT "carrier_key") AS carrier_count,
+  COUNT(DISTINCT "contract_key") AS contract_number_count,
+  COUNT(DISTINCT "policy_end_month") AS policy_end_month_count,
+  MIN("policy_to_date") AS earliest_policy_to_date,
+  MAX("policy_to_date") AS latest_policy_to_date,
+  SUM("covered_lives_eoy") AS total_covered_lives_eoy,
+  SUM("premium_received") AS total_premium_received,
+  SUM("total_earned_premium") AS total_earned_premium
+FROM "insurance_contracts"
+GROUP BY "company_id";
+`
+}
+
 function indexesSql() {
   return `
 CREATE INDEX IF NOT EXISTS "idx_form_5500_sponsor_ein" ON "form_5500_2025_latest"("SPONS_DFE_EIN");
@@ -390,6 +841,17 @@ CREATE INDEX IF NOT EXISTS "idx_schedule_a_plan_ein" ON "schedule_a_2025_latest"
 CREATE INDEX IF NOT EXISTS "idx_schedule_a_carrier_ein" ON "schedule_a_2025_latest"("INS_CARRIER_EIN");
 CREATE INDEX IF NOT EXISTS "idx_schedule_a_carrier_name" ON "schedule_a_2025_latest"("INS_CARRIER_NAME");
 CREATE INDEX IF NOT EXISTS "idx_schedule_a_policy_dates" ON "schedule_a_2025_latest"("INS_POLICY_FROM_DATE", "INS_POLICY_TO_DATE");
+CREATE INDEX IF NOT EXISTS "idx_companies_sponsor_ein" ON "companies"("sponsor_ein");
+CREATE INDEX IF NOT EXISTS "idx_companies_mail_state_name" ON "companies"("mail_state", "display_name");
+CREATE INDEX IF NOT EXISTS "idx_plans_company_id" ON "plans"("company_id");
+CREATE INDEX IF NOT EXISTS "idx_filings_company_id" ON "filings"("company_id");
+CREATE INDEX IF NOT EXISTS "idx_filings_plan_id" ON "filings"("plan_id");
+CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_company_policy_to" ON "insurance_contracts"("company_id", "policy_to_date");
+CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_plan_id" ON "insurance_contracts"("plan_id");
+CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_carrier_key" ON "insurance_contracts"("carrier_key");
+CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_contract_key" ON "insurance_contracts"("contract_key");
+CREATE INDEX IF NOT EXISTS "idx_insurance_contracts_policy_end_month" ON "insurance_contracts"("policy_end_month");
+CREATE INDEX IF NOT EXISTS "idx_contract_coverage_types_coverage" ON "contract_coverage_types"("coverage_type", "contract_id");
 `
 }
 
@@ -454,6 +916,9 @@ async function buildSeed(args) {
     await write(stream, 'BEGIN TRANSACTION;\n\n')
 
     if (args.drop) {
+      for (const table of derivedTableNames()) {
+        await write(stream, `DROP TABLE IF EXISTS ${quoteIdent(table)};\n`)
+      }
       for (const dataset of [...DATASETS].reverse()) {
         await write(stream, `DROP TABLE IF EXISTS ${quoteIdent(dataset.table)};\n`)
       }
@@ -466,6 +931,8 @@ async function buildSeed(args) {
       await write(stream, createTableSql(dataset, fields) + '\n')
     }
 
+    await write(stream, derivedSchemaSql() + '\n')
+
     await write(stream, `CREATE TABLE IF NOT EXISTS "seed_metadata" (\n  "dataset" TEXT PRIMARY KEY,\n  "source_csv" TEXT NOT NULL,\n  "source_layout" TEXT NOT NULL,\n  "row_count" INTEGER NOT NULL,\n  "seeded_at" TEXT NOT NULL\n);\n\n`)
 
     if (!args.schemaOnly) {
@@ -474,6 +941,8 @@ async function buildSeed(args) {
         rowCounts.set(dataset.table, count)
         await write(stream, '\n')
       }
+
+      await write(stream, derivedPopulateSql() + '\n')
     }
 
     await write(stream, indexesSql())
